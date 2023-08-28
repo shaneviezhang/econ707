@@ -1,0 +1,676 @@
+---
+title: "Spatial Econometrics"
+subtitle: "Week 13"
+author: "Alex Cardazzi"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    # chalkboard: true
+
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: "https://ww1.odu.edu/facultystaff/communication/toolkit/current-logos/_jcr_content/par/section_1593932067/columns_527553970/column_2/image.img.440.jpg/1599596551953.jpg"
+    footer: "ECON 707/807: Econometrics II"
+    
+self-contained: true
+# embed-resources: true
+# standalone: true
+
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(out.width = '90%')
+
+par(mar = c(4.1, 4.1, 1.1, 4.1))
+set.seed(321)
+library("stargazer")
+library("lubridate")
+library("forecast")
+library("scales")
+library("tseries")
+
+colorize <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'>%s</span>", color,
+      x)
+  } else x
+}
+```
+
+## Topics
+
+- Geographic Information System Tools
+    - ```sf```, ```spdep```
+
+- Spatial Econometrics
+    - Moran's I
+    - Spatial Lag, Spatial Error
+    
+## GIS Tools
+
+The ```sf``` package ([cheatsheet](https://github.com/rstudio/cheatsheets/blob/main/sf.pdf)) is an extremely helpful tool for most things GIS in R.
+
+- Calculate distances, lengths, nearest neighbor
+- Conclude if point is inside some boundary
+- Create buffer zones, grids
+
+. . .
+
+The main GIS filetypes are .shp and .geojson.  Be sure to know your coordinate reference system (CRS).
+
+## GIS Tools {visibility="uncounted"}
+
+```{r warning=FALSE, message=FALSE}
+#| code-fold: show
+# install.packages("sf"); install.packages("spdep")
+library("sf")
+
+# https://data.cityofnewyork.us/City-Government/Borough-Boundaries/tqmj-j8zm
+nyc <- read_sf("https://data.cityofnewyork.us/api/geospatial/tqmj-j8zm?method=export&format=GeoJSON")
+head(nyc)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+OLD_MAR <- par()$mar
+par(mar = rep(0, 4))
+
+plot(nyc$geometry)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nyc$geometry, col = alpha("tomato", .2))
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nyc$geometry, border = NA, col = alpha("tomato", .2))
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+# https://data.cityofnewyork.us/Transportation/Subway-Entrances/drex-xx56
+subway <- read.csv("https://data.cityofnewyork.us/api/views/he7q-3hwy/rows.csv?accessType=DOWNLOAD")
+ptz <- unlist(strsplit(gsub("POINT \\(|\\)$", "", subway$the_geom), "\\s+"))
+subway$lat <- as.numeric(ptz[c(F,T)])
+subway$long <- as.numeric(ptz[c(T,F)])
+subway$the_geom <- NULL
+head(subway)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+subway_sf <- st_as_sf(subway, coords = c("long","lat"))
+st_crs(subway_sf) <- st_crs(nyc)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nyc$geometry, border = NA, col = alpha("tomato", .2))
+plot(subway_sf$geometry, pch = 20, col = alpha("black", .2), add = TRUE)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+head(subway_sf <- st_join(subway_sf, nyc[,"boro_name"]))
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nyc$geometry, border = NA, col = alpha("tomato", .2))
+plot(subway_sf$geometry, pch = 20, col = alpha("black", .2), add = TRUE)
+subway_sf_buf <- st_buffer(subway_sf[1:100,], 400)
+plot(subway_sf_buf$geometry, add = TRUE, col = alpha("dodgerblue", .2))
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+st_intersects(subway_sf_buf, subway_sf)
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+nn <- st_nearest_feature(subway_sf[1:7,])
+# for not itself:
+# st_nearest_feature(subway_sf[1:7], other_sf)
+nn
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+st_distance(subway_sf[1:7,], subway_sf[nn,])
+```
+
+## GIS Tools {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+st_distance(subway_sf[1:7,], subway_sf[nn,], by_element = TRUE)
+```
+
+## Tobler's First Law of Geography
+
+> "Everything is related to everything else, but near things are more related than distant things."
+
+. . .
+
+We often need to consider spatial interactions and spillovers in our models.  Sometimes because they are interesting, other times because we'd otherwise violate assumptions.
+
+- Spread of Disease
+- Effects of Pollution
+- Effects of legal marijuana
+
+
+## Modifiable Areal Unit Problem (MAUP)
+
+MAUP is a source of statistical bias that can result when point-based measures are aggregated into larger areas.
+
+- Effect of luminosity on crime: 
+	  
+	  - Crime Counts? Choose an area (corner, block, neighborhood (?), county, state)
+	  - Whether a crime happens? Need all possible criminal interactions
+	  - Use CI (and counterfactuals) to inform this
+
+- Effect of pavement smoothness on crash rates
+	  
+	  - What units should we use for this?
+	  - A mile? A kilometer? Distance between exits? Routes? Route-by-County? A grid?
+
+## Modifiable Areal Unit Problem (MAUP) {background-image="https://gisgeography.com/wp-content/uploads/2020/11/MAUP-Gerrymeandering-678x237.png" background-size="contain" visibility="uncounted"}
+
+
+
+<!-- ##  -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- st_sample(nyc, 50) -> triangles -->
+<!-- triangles <- st_triangulate(st_union(triangles)) -->
+<!-- triangles <- st_collection_extract(triangles, "POLYGON") -->
+<!-- triangles_sf <- data.frame(id = 1:length(triangles)) -->
+<!-- triangles_sf$geom <- triangles -->
+<!-- triangles_sf <- st_as_sf(triangles_sf, crs = st_crs(nyc)) -->
+
+<!-- par(mar = rep(0, 4)) -->
+<!-- plot(nyc$geometry, col = alpha(1:5, .6), border = NA) -->
+<!-- plot(triangles_sf, col = alpha("black", 0), add = TRUE) -->
+<!-- plot(subway_sf$geometry, col = "black", pch = 20, add = TRUE) -->
+<!-- ``` -->
+
+<!-- ## -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- tmp <- st_join(subway_sf, triangles_sf) -->
+<!-- tmp <- as.data.frame(table(tmp$id)) -->
+<!-- triangles_sf$subways <- tmp$Freq[match(triangles_sf$id, tmp$Var1)] -->
+<!-- ifelse(is.na(triangles_sf$subways), 0, triangles_sf$subways) -> triangles_sf$subways -->
+<!-- plot(table(triangles_sf$subways), ylab = "Frequency", xlab = "Number of Subway Stations", -->
+<!--      main = paste0("Mean: ", round(mean(triangles_sf$subways), 1), -->
+<!--                    "; Standard Deviation: ", round(sd(triangles_sf$subways), 1))) -->
+<!-- ``` -->
+
+## Autocorrelation
+
+Classically, autocorrelation is defined as when *nearby* observations are correlated with one another.
+
+- $\text{cor}(Y_t, Y_{t-1})$
+
+. . .
+
+We can generalize the word "nearby" to mean temporally and spatially.
+
+- $\text{cor}(Y_{i,t}, Y_{i, t-1})$
+- $\text{cor}(Y_{i,t}, Y_{j, t})$
+
+## Autocorrelation {visibility="uncounted"}
+
+Now, we can think of cross sectional (and panel) data the way we thought of time series data.
+
+- OLS: $Y_i = f(X_i, e_i)$
+- Spatial lag: $Y_i = f(X_i, X_j, e_i)$ or $Y_i = f(X_i, Y_j, e_i)$
+- Spatial error: $Y_i = f(X_i, e_i, e_j)$
+- Spatial heterogeneity: $Y_i = f(X_i, e_i, \gamma)$
+
+## Spatial Autocorrelation {background-image="spatial_autocorrelation.png" background-size="contain"}
+
+## Spatial Weights
+
+To calculate spatial autocorrelation, define "nearby":
+
+- Continuous Distance (m meters away)
+- Binary Distance (within some m meters)
+- Continguity (next to, touching)
+- Interactions
+- K-nearest
+
+. . .
+
+Your results will be strongly dependent on how you define "nearby".
+
+## Spatial Weights {visibility="uncounted"}
+
+For simplicity, we will only consider rook and queen contiguity.
+
+```{r echo=FALSE}
+par(mfrow = c(1, 2))
+plot(0, 0, bty = "n", col = alpha("white", 0),
+     xaxt = "n", yaxt = "n",
+     xlab = "", ylab = "",
+     xlim = c(-1.25, 1.25),
+     ylim = c(-1.25, 1.25),
+     main = "Rook Contiguity")
+abline(v = c(-.5, .5))
+abline(h = c(-.5, .5))
+arrows(0, .1, 0, .8)
+arrows(0, -.1, 0, -.8)
+arrows(.1, 0, .8, 0)
+arrows(-.1, 0, -.8, 0)
+
+plot(0, 0, bty = "n", col = alpha("white", 0),
+     xaxt = "n", yaxt = "n",
+     xlab = "", ylab = "",
+     xlim = c(-1.25, 1.25),
+     ylim = c(-1.25, 1.25),
+     main = "Queen Contiguity")
+abline(v = c(-.5, .5))
+abline(h = c(-.5, .5))
+arrows(0, .1, 0, .8)
+arrows(0, -.1, 0, -.8)
+arrows(.1, 0, .8, 0)
+arrows(-.1, 0, -.8, 0)
+arrows(.1, .1, .65, .65)
+arrows(.1, -.1, .65, -.65)
+arrows(-.1, .1, -.65, .65)
+arrows(-.1, -.1, -.65, -.65)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+
+# https://data.cityofnewyork.us/City-Government/2010-Neighborhood-Tabulation-Areas-NTAs-/cpf4-rkhq
+nta <- read_sf("https://data.cityofnewyork.us/api/geospatial/cpf4-rkhq?method=export&format=GeoJSON")
+head(nta)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nta$geometry, col = alpha(nta$boro_code, .6), border = "white")
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+nta$shape_area <- as.numeric(nta$shape_area)
+colz <- (nta$shape_area - min(nta$shape_area)) / (max(nta$shape_area) - min(nta$shape_area))
+plot(nta$geometry, col = alpha(nta$boro_code, colz), border = "white")
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nta$geometry, col = alpha(nta$boro_code, .6), border = "white")
+plot(subway_sf$geometry, col = alpha("black", .2), pch = 20, add = TRUE)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+library("spdep")
+
+nb_r <- poly2nb(nta, queen = FALSE)
+nb_q <- poly2nb(nta, queen = TRUE)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+::: {.panel-tabset}
+
+### Rook
+
+```{r}
+#| code-fold: true
+summary(nb_r)
+```
+
+### Queen
+
+```{r}
+#| code-fold: true
+summary(nb_q)
+```
+
+:::
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+coords <- st_centroid(nta$geometry)
+plot(nta$geometry, col = alpha(nta$boro_code, .6), border = "white")
+plot(nb_r, coords, pch = 20, add = TRUE, col = alpha("tomato", .6))
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mar = rep(0, 4))
+plot(nta$geometry, col = alpha(nta$boro_code, .6), border = "white")
+plot(nb_q, coords, pch = 20, add = TRUE, col = alpha("tomato", .6))
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r results='hide'}
+#| code-fold: true
+set.ZeroPolicyOption(TRUE) # get.ZeroPolicyOption()
+w <- nb2listw(nb_q, style = "W")
+```
+
+::: {.panel-tabset}
+
+### Neighbors
+
+```{r}
+#| code-fold: true
+w$neighbours[1:4]
+```
+
+### Weights
+
+```{r}
+#| code-fold: true
+w$weights[1:4]
+```
+
+:::
+
+## Spatial Autocorrelation {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+hous <- read_sf("https://data.cityofnewyork.us/api/geospatial/kyz5-72x5?method=export&format=GeoJSON")
+m <- match(nta$ntacode, hous$nta2010)
+nta$units <- as.numeric(hous$cenunits10[m])
+nta$permits <- as.numeric(hous$filed[m])
+nta$permits <- ifelse(is.na(nta$permits), 0, nta$permits)
+
+tmp <- st_join(subway_sf, nta[,"ntacode"])
+tmp <- as.data.frame(table(tmp$ntacode))
+nta$subway <- tmp$Freq[match(nta$ntacode, tmp$Var1)]
+nta$subway <- ifelse(is.na(nta$subway), 0, nta$subway)
+
+head(nta[,c(4, 6, 9:11)])
+```
+
+## Moran's I
+
+We want to come up with a quantity similar to a (pearson) correlation coefficient that runs from -1 to 1.
+
+Let's use correlation as a motivation:
+
+$$r = \frac{\sum (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum {(x_i - \bar{x})^2}\sum {(y_i - \bar{y})^2}}}$$
+
+. . .
+
+$$I = \frac{N \sum_i \sum_j w_{i,j} (x_i - \bar{x})(x_j - \bar{x})}{\sum_i \sum_j w_{i,j} \sum_i (x_i - \bar{x})^2} $$
+
+## Moran's I {visibility="uncounted"}
+
+```{r echo=FALSE}
+
+par(mfrow = c(2, 1))
+plot(0, 0, bty = "n", xaxt = "n", yaxt = "n",
+     pch = "", ylab = "", xlab = "",
+     main = "Positive Spatial Autocorrelation")
+for(i in seq(-1, 1, .5)) segments(x0 = i, y0 = -1, y1 = 1)
+for(i in seq(-1, 1, 1)) segments(x0 = -1, x1 = 1, y0 = i)
+text(1, x = -.75, y = .5); text(1, x = -.25, y = .5)
+text(1, x = -.75, y = -.5); text(1, x = -.25, y = -.5)
+text(0, x = .75, y = .5); text(0, x = .25, y = .5)
+text(0, x = .75, y = -.5); text(0, x = .25, y = -.5)
+
+
+plot(0, 0, bty = "n", xaxt = "n", yaxt = "n",
+     pch = "", ylab = "", xlab = "",
+     main = "Negative Spatial Autocorrelation")
+for(i in seq(-1, 1, .5)) segments(x0 = i, y0 = -1, y1 = 1)
+for(i in seq(-1, 1, 1)) segments(x0 = -1, x1 = 1, y0 = i)
+text(1, x = -.75, y = .5); text(0, x = -.25, y = .5)
+text(0, x = -.75, y = -.5); text(1, x = -.25, y = -.5)
+text(0, x = .75, y = .5); text(1, x = .25, y = .5)
+text(1, x = .75, y = -.5); text(0, x = .25, y = -.5)
+```
+
+## Moran's I {visibility="uncounted" .smaller}
+
+Using a Queen contiguity weight matrix:
+
+$$\bar{x} = \frac{1}{2}$$
+
+. . .
+
+$$\sum w_{i,j} = 32$$
+
+. . .
+
+$$\sum (x_i - \bar{x})^2 = (1-\frac{1}{2})^2 + ... + (0-\frac{1}{2})^2 = 8 * \frac{1}{4} = 2$$
+
+. . .
+
+$$\sum_i \sum_j w_{i,j} (x_i - \bar{x})(x_j - \bar{x}) = 3 (1 * \frac{1}{2} * \frac{1}{2}) + 5 (0 * \frac{1}{2} * \frac{1}{2}) + ... = 4$$
+
+. . .
+
+$$I_{\text{top}} = \frac{8 * 4}{32 * 2} = \frac{1}{2}$$
+$$I_{\text{bottom}} = \frac{8 * -2}{32 * 2} = -\frac{1}{4}$$
+
+## Moran's I {visibility="uncounted"}
+
+```{r results='hold'}
+#| code-fold: show
+moran(nta$permits, w, n = nrow(nta), S0 = Szero(w))
+moran.test(nta$permits, w)
+```
+
+## Moran's I {visibility="uncounted"}
+
+```{r results='hold'}
+#| code-fold: show
+moran.plot(nta$permits, w)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+perms.lag <- lag.listw(w, nta$permits)
+subwy.lag <- lag.listw(w, nta$subway)
+```
+
+## Spatial Weights {visibility="uncounted"}
+
+```{r}
+par(mfrow = c(1, 2))
+plot(nta$permits, perms.lag)
+plot(nta$subway, subwy.lag)
+```
+
+## Modeling Change in Building Permits
+
+Suppose we want to model the change in building permits as a function of public transportation accessability.  If there is more easily accessible transportation, perhaps demand (housing stock) will grow faster.  Our model would look like the following:
+
+$$\text{Permits}_i = \alpha + \beta*\text{Subway}_i + e_i$$
+
+## Modeling Change in Building Permits {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mfrow = c(1, 2), mar = rep(0, 4))
+plot(nta$geometry, col = alpha("tomato", asinh(nta$subway)/max(asinh(nta$subway))))
+plot(nta$geometry, col = alpha("tomato", asinh(nta$permits)/max(asinh(nta$permits))))
+```
+
+## Modeling Change in Building Permits {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+r <- lm(permits ~ subway, nta)
+summary(r)
+```
+
+## Modeling Change in Building Permits {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+lm.morantest(r, w)
+```
+
+## Modeling Change in Building Permits {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+color_func <- colorRampPalette(c("dodgerblue", "tomato"))
+colorz <- color_func(length(unique(r$residuals)))
+par(mar = rep(0, 4))
+plot(nta$geometry, col = alpha(colorz[order(r$residuals)], .6))
+```
+
+## Spatial Lag in X
+
+Good news!
+
+. . .
+
+A model with spatially lagged x variables does not impact the OLS assumptions!  You can include these in the model without any complications.
+
+. . .
+
+Imagine a model of crime as a function of unemployment.  You could model this as the following:
+
+$$\text{Crime}_i = \alpha + \beta_1 \text{Unemployment}_i + \beta_2 \text{Unemployment}_j + e_i$$
+
+## Spatial Lag in X {visibility="uncounted"}
+
+```{r}
+r1 <- spatialreg::lmSLX(permits ~ subway,
+                        data = nta, w,
+                        zero.policy = TRUE)
+summary(r1)
+```
+
+## Spatial Error {visibility="uncounted"}
+
+If you are still getting spatially correlated residuals, there might be some unobserved, spatially correlated factor in the error term.  Imagine modeling average income in a county as a function of average education.  While location/distance might not influence income or education, the way counties are created might make closer counties more similar to nearby counties than far away counties.  This suggests that the error in the model is correlated across space.
+
+. . .
+
+Importantly, a spatial error model only induces inefficient parameter estimates (bad standard errors).
+
+## Spatial Error {visibility="uncounted"}
+
+$$\begin{align} \text{Income}_i &= X_i\beta + \epsilon_i \\
+\epsilon_i &= \lambda w_i\epsilon_j + e_i\end{align}$$
+
+```{r}
+#| code-fold: show
+spatialreg::errorsarlm(permits ~ subway,
+                        data = nta, w,
+                        zero.policy = TRUE) -> r2
+summary(r2)
+```
+
+## Spatial Lag
+
+Imagine a model of median income by county.  If earnings increase in Norfolk, those residents might go spend more money in Virginia Beach, thus increasing earnings for Virginia Beach.  This would be positive spatial autocorrelation, or spillover.
+
+. . .
+
+Imagine a model of unemployment by county.  If unemployment decreases in Norfolk (and total jobs remains the same) it could be that they are cannibalizing jobs from Virginia Beach residents.  This would be negative spillover.
+
+## Spatial Lag {visibility="uncounted"}
+
+$$\begin{align} \text{Income}_i &= X_i\beta + \epsilon_i \\
+\epsilon_i &= \rho w_i y_j + e_i\end{align}$$
+
+```{r}
+spatialreg::lagsarlm(permits ~ subway,
+                        data = nta, w,
+                        zero.policy = TRUE) -> r3
+summary(r3)
+spatialreg::impacts(r3, listw = w)
+```
+
+# Final Project
+
+## Final Project {visibility="uncounted"}
+
+Next week: "brown bag" presentations
+
+- You will be graded on your presentation but it does not need to be perfect.  You will get feedback from myself as well as at least one other person.  Please implement this feedback into your final submission
+- Your submission should be a memo + manual (like before).
+    - Why is this important?
+    - Why/how did you select the variables you did?
+    - Why/how did you select the functional form?
+    - How does your model preform?
+    - What is your forecast?
+    - Do you trust it?
+
+Two weeks: projects are be due Dec. 14 at 12:01 am.

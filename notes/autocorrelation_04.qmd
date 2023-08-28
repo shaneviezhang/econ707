@@ -1,0 +1,922 @@
+---
+title: "Autocorrelation"
+subtitle: "Week 4"
+author: "Shan Zhang"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    #chalkboard: true
+
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: https://www.odu.edu/content/dam/odu/logos/univ/png-72dpi/odu-secondarytm-blu.png
+    footer: "ECON 707/807: Econometrics II"
+  
+self-contained: true
+  
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(out.width = '90%')
+par(mar = c(4.1, 4.1, 1.1, 4.1))
+set.seed(123)
+library("stargazer")
+```
+
+## Topics
+
+- Stationarity
+- Autocorrelation
+- Moving Averages
+- Exam Review
+
+# Stationarity
+
+## Mean Stationarity
+
+$$E[y_t] = \mu \ \forall \ t \in \{0, ..., T+h\}$$
+
+. . .
+
+An example of a mean stationary process is **white noise**: independent and identically distributed process with mean $\mu$ (usually 0) and variance $\sigma^2$.
+
+## Mean Stationarity {visibility="uncounted"}
+
+When modeling, OLS assumes a mean stationary process.
+
+Example: suppose we want to look at the impact of a policy on an outcome.
+
+## Mean Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+df <- data.frame(t = 1:100, y = NA)
+df$y <- 0 + .2*df$t + rnorm(100)
+
+plot(df$t, df$y, xlab = "Time", ylab = "Outcome (Units)", type = "l")
+abline(v = 70, lty = 2)
+text("Pre", x = 65, y = 3)
+text("Post", x = 76, y = 3)
+```
+
+## Mean Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+reg <- lm(y ~ I(t>=70), data = df)
+summary(reg)
+```
+
+## Mean Stationarity {visibility="uncounted"}
+```{r}
+#| code-fold: true
+
+plot(df$t, df$y, xlab = "Time", ylab = "Outcome (Units)", type = "l")
+abline(v = 70, lty = 2)
+
+lines(df$t, predict(reg, df))
+```
+
+## Variance Stationarity
+
+$$\text{var}(y_t) = \sigma^2 \ \forall \ t \in \{0, ..., T+h\}$$
+
+. . .
+
+White Noise is also an example of a variance stationary process.  In fact, so is the previous time series.
+
+Note that mean stationarity $\neq$ variance stationarity.
+
+## Variance Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+y2 <- 0 + rnorm(100, 0, 1:100 / 20)
+plot(df$t, y2, type = "l",
+     xlab = "Time", ylab = "Outcome (Units)")
+abline(h = 0, lty = 2)
+```
+
+## Variance Stationarity {visibility="uncounted"}
+
+This is an issue when calculating standard errors, which uses the variance of the error term.
+
+OLS assumes the variance of the error is constant and does not vary in any dimension.
+
+<!-- ## Mean Stationarity {visibility="uncounted"} -->
+
+<!-- What should we do if we have a series that does not have a stationary mean? -->
+
+<!-- - Difference -->
+<!-- - De-trend -->
+
+<!-- ## Mean Stationarity {visibility="uncounted"} -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+
+<!-- reg <- lm(y ~ t, data = df) -->
+<!-- plot(df$t, c(NA, diff(df$y)), -->
+<!--      xlab = "Time", ylab = "Outcome (Units)", type = "l", -->
+<!--      col = "tomato", ylim = c(min(diff(df$y)), max(diff(df$y))*1.25)) -->
+<!-- lines(df$t, reg$residuals, col = "dodgerblue") -->
+<!-- legend("topleft", legend = c("Difference", "Trend Residuals"), -->
+<!--        col = c("tomato", "dodgerblue"), -->
+<!--        bty = "n", lty = 1, horiz = T) -->
+<!-- ``` -->
+
+# Autocorrelation
+
+## Variance
+
+$$var(x) = \frac{1}{n}\sum(x-E[x])^2$$
+
+. . .
+
+$$var(x) = \frac{1}{n}\sum(x-E[x])(x-E[x])$$
+
+## Covariance
+
+$$cov(x, y) = \frac{1}{n}\sum(x-E[x])(y-E[y])$$
+
+## Correlation
+
+$$cor(x, y) = \frac{cov(x,y)}{\sqrt{var(x)var(y)}}$$
+
+## Autocorrelation
+
+$$\rho(1) = \frac{cov(y_t,y_{t-1})}{var(y)}$$
+
+$$\rho(k) = \frac{cov(y_t,y_{t-k})}{var(y)} = \frac{\gamma(k)}{\gamma(0)}$$
+
+<!-- ## Autocorrelation Confidence -->
+
+<!-- If $Y_t$ is White Noise, then: $\text{var}(\rho(k)) = \frac{1}{T}$ -->
+
+<!-- . . . -->
+
+<!-- This implies that the standard error is: $\frac{1}{\sqrt{T}}$. -->
+
+<!-- . . . -->
+
+<!-- Therefore, the (95%) confidence interval around is: $\rho(k) \pm \frac{1.96}{\sqrt{T}}$ -->
+
+<!-- - Since $\rho(k)$ for White Noise is 0, this is how we reject the null hypothesis that $Y_t$ is White Noise. -->
+
+## Autocorrelation Function
+
+$$Y_t = 2 + .5Y_{t-1} + \epsilon_t$$
+
+```{r}
+#| output: "asis"
+#| code-fold: true
+auto_cor <- function(vector, lags = 1){
+  
+  t <- (lags+1):length(vector)
+  cor(vector[t-lags], vector[t], use="complete.obs")
+}
+
+df$y2 <- 0
+for(i in 2:100) df$y2[df$t == i] <- 2 + (.5*df$y2[df$t == i-1]) + rnorm(1)
+
+print(paste0("Lag ", c(1, 2, 10), ": ", round(c(Lag1 = auto_cor(df$y2, 1), Lag2 = auto_cor(df$y2, 2), Lag10 = auto_cor(df$y2, 10)), 4), "\n"))
+```
+
+## Autocorrelation Function {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+vec <- 1
+for(i in 1:20){
+  
+  vec <- c(vec, auto_cor(df$y2, i))
+}
+ci <- c(1.96/sqrt(length(df$y2)), -1.96/sqrt(length(df$y2)))
+plot(0:20, vec, type = "h",
+     xlab = "Lag", ylab = "ACF",
+     ylim = c(min(ci, vec), max(ci, vec)))
+abline(h = 0)
+abline(h = ci,
+       col = "dodgerblue", lty = 2)
+```
+
+## Autocorrelation Function {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+acf(df$y2, lag.max = 20, ci.type = "white")
+```
+
+## Autocorrelation Function {visibility="uncounted"}
+
+$$Y_t = \beta Y_{t-1} + e_{t}$$
+
+. . .
+
+$$Y_t = \beta (\beta Y_{t-2} + e_{t-1}) + e_{t} = \beta^2Y_{t-2} + \beta e_{t-1} + e_t$$
+
+. . .
+
+$$\begin{aligned}
+Y_t &= \beta (\beta (\beta Y_{t-3} + e_{t-2}) + e_{t-1}) + e_{t}
+\\ &= \beta^3Y_{t-3} + \beta^2e_{t-2} + \beta e_{t-1} + e_{t}
+\end{aligned}
+$$
+
+. . .
+
+$$Y_t = \sum_{i = 0}^{\infty} \beta^i e_{t-i}$$
+
+What do we think about $\beta$?
+
+## Autocorrelation Function {visibility="uncounted"}
+
+If $|\beta| < 1$, then eventually shocks in the past disappear, and we can calculate this sum.
+
+. . .
+
+$$E[Y_t] = E[\sum^\infty_{i = 0} \beta^ie_{t-i}] = 0$$
+$$\text{var}(Y_t) = \text{var}(\sum^\infty_{i = 0} \beta^ie_{t-i}) = \ ... \ = \frac{\sigma^2}{1 - \beta^2}$$
+
+:::aside
+
+[[Reference](https://en.wikipedia.org/wiki/Geometric_series#Sum)]
+
+:::
+
+## Partial Autocorrelation
+
+We can also talk about *partial* autocorrelations.
+
+- This is the correlation of lag $k$ after partialing out the correlations of lags $1$ through $k-1$.
+
+## Partial Autocorrelation {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+pacf(df$y2)
+```
+
+## Random Walk
+
+What if $|\beta| = 1$?  This is called a Random Walk or Unit Root Process.  The equation looks like this: $Y_t = Y_{t-1} + e_t$.
+
+. . .
+
+$$Y_t = Y_0 + \sum_{i=0}^{\infty} e_{t-i}$$
+
+From Hansen: *The past never disappears, and shocks are permanent.*
+
+. . .
+
+To fix a unit root, then the first difference is white noise.
+
+$$\Delta Y_t = Y_t - Y_{t-1} = Y_{t-1} + e_{t} - Y_{t-1}$$
+
+## Random Walk {visibility="uncounted"}
+
+```{r eval=FALSE}
+tseries::adf.test()
+```
+
+Here, the *NULL* hypothesis is that there exists a unit root.  Rejecting the *NULL* suggests the process is stationary.
+
+## AR(1)
+
+The mean of an AR(1) (without an intercept) is 0.  However, the *conditional* mean is: $E[Y_t|\Omega_{t-1}] = E[\beta Y_{t-1} + e_t|\Omega_{t-1}] = \beta Y_{t-1}$.
+
+Note that no matter the value of $Y_{t-1}$, multiplying by $\beta$ shifts it towards the long term average (0).
+
+. . .
+
+The *conditional* variance is: $\text{var}(Y_t - E[Y_t|\Omega_{t-1}]|\Omega_{t-1}) = \text{var}(e_t|\Omega_{t-1})$. From here, $\text{var}(e_t|\Omega_{t-1}) = \text{var}(e_t) = \sigma^2$
+
+. . .
+
+The autocorrelation function of an AR(1) process is: $\rho(k) = \beta^k$
+
+## AR(1) + Intercept
+
+What if our AR(1) model has an intercept?
+
+$$Y_t = \alpha + \beta Y_{t-1} + e_t$$
+
+. . .
+
+To skip some math:
+
+$$\begin{align}
+E[Y_t] &= \alpha + \beta \mu \\ &\text{where} \ \mu = \frac{\alpha}{1-\beta}
+\end{align}$$
+
+$$E[Y_t|\Omega_{t-1}] = \alpha + \beta Y_{t-1}$$
+
+## Visualizing Autocorrelations
+
+```{r}
+#| code-fold: true
+s1 <- data.frame(y = rnorm(100), t = 1:100)
+
+s2 <- data.frame(y = rep(0, 101), t = 0:100)
+for(i in 1:100) s2$y[s2$t == i] <- (.1*s2$y[s2$t == i-1]) + rnorm(1)
+
+s3 <- data.frame(y = rep(0, 101), t = 0:100)
+for(i in 1:100) s3$y[s3$t == i] <- (.5*s3$y[s3$t == i-1]) + rnorm(1)
+
+s4 <- data.frame(y = rep(0, 101), t = 0:100)
+for(i in 1:100) s4$y[s4$t == i] <- (.9*s4$y[s4$t == i-1]) + rnorm(1)
+
+s5 <- data.frame(y = rep(15, 101), t = 0:100)
+for(i in 1:100) s5$y[s5$t == i] <- (.9*s5$y[s5$t == i-1]) + rnorm(1)
+
+s6 <- data.frame(y = rep(0, 101), t = 0:100)
+for(i in 1:100) s6$y[s6$t == i] <- 0.5 + (.9*s6$y[s6$t == i-1]) + rnorm(1)
+
+s7 <- data.frame(y = rep(0, 101), t = 0:100)
+for(i in 1:100) s7$y[s7$t == i] <- (-.9*s7$y[s5$t == i-1]) + rnorm(1)
+```
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s1$t, s1$y, type = "l",
+     main = expression(paste("Y"[t], " = ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s1$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s1$y)
+```
+:::
+
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s2$t, s2$y, type = "l",
+     main = expression(paste("Y"[t], " = 0.1*Y"[t-1], " + ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s2$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s2$y)
+```
+:::
+
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s3$t, s3$y, type = "l",
+     main = expression(paste("Y"[t], " = 0.5*Y"[t-1], " + ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s3$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s3$y)
+```
+:::
+
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s4$t, s4$y, type = "l",
+     main = expression(paste("Y"[t], " = 0.9*Y"[t-1], " + ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s4$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s4$y)
+```
+:::
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s7$t, s7$y, type = "l",
+     main = expression(paste("Y"[t], " = -0.9*Y"[t-1], " + ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s7$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s7$y)
+```
+:::
+
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s5$t, s5$y, type = "l",
+     main = expression(paste("Y"[t], " = 0.9*Y"[t-1], " + ", epsilon, "; Starting at 15.")),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s5$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s5$y)
+```
+:::
+
+
+## Visualizing Autocorrelations {visibility="uncounted"}
+::: panel-tabset
+### TS
+```{r}
+#| code-fold: true
+plot(s6$t, s6$y, type = "l",
+     main = expression(paste("Y"[t], " = 0.5 + 0.9*Y"[t-1], " + ", epsilon)),
+     xlab = "Time", ylab = "Residual")
+abline(h = 0, lty = 2)
+abline(h = .5 + .9*(.5/(1-.9)), lty = 3)
+```
+### ACF
+```{r}
+#| code-fold: true
+acf(s6$y)
+```
+### PACF
+```{r}
+#| code-fold: true
+pacf(s6$y)
+```
+:::
+
+
+## Forecasting with AR(p)
+
+For forecasting, use the n-step method.
+
+. . .
+
+$$E[Y_T|\Omega_{T-1}] = \beta Y_{T-1} \implies E[Y_{T+1}|\Omega_{T}] = \beta Y_{T}$$
+
+$$E[Y_{T+2}|\Omega_{T}] = \beta Y_{T+1} = \beta(\beta Y_{T})$$
+
+. . .
+
+$$E[Y_T|\Omega_{T-1}] = \alpha + \beta Y_{T-1} \implies E[Y_{T+1}|\Omega_{T}] = \alpha + \beta Y_{T}$$
+
+$$\begin{align}
+E[Y_{T+2}|\Omega_{T}] &= \alpha + \beta Y_{T+1} \\
+&= \alpha + \beta(\alpha + \beta Y_{T}) \\
+&= (1+\beta)\alpha + \beta^2Y_{T}
+\end{align}$$
+
+## Forecasting with AR(p) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+s5 <- data.frame(y = rep(0, 121), t = 0:120)
+for(i in 1:120) s5$y[s5$t == i] <- (.9*s5$y[s5$t == i-1]) + rnorm(1)
+s5$horizon <- ifelse(s5$t >= 101, 1, 0)
+
+lim <- s5$horizon == 0
+plot(s5$t[lim], s5$y[lim],
+     xlab = "Time", ylab = "Outcome",
+     xlim = c(0, 120), type = "l")
+abline(h = 0, lty = 2)
+
+reg1 <- arima(s5$y[lim], c(1, 0, 0), include.mean = FALSE)
+reg2 <- arima(s5$y[lim], c(1, 0, 0), include.mean = TRUE)
+
+p1 <- predict(reg1, n.ahead = 20)
+p2 <- predict(reg2, n.ahead = 20)
+lines(s5$t[!lim], s5$y[!lim], col = "tomato", lwd = 2)
+lines(p1$pred, col = "dodgerblue")
+lines(p2$pred, col = "mediumseagreen")
+legend("bottomleft", bty = "n", lty = 1,
+       legend = c("No Intercept", "Intercept"),
+       col = c("dodgerblue", "mediumseagreen"))
+```
+
+## Forecasting with AR(p) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+s6 <- data.frame(y = rep(0, 121), t = 0:120)
+for(i in 1:120) s6$y[s6$t == i] <- .5 + (.9*s6$y[s6$t == i-1]) + rnorm(1)
+s6$horizon <- ifelse(s6$t >= 101, 1, 0)
+
+lim <- s6$horizon == 0
+plot(s6$t[lim], s6$y[lim],
+     xlab = "Time", ylab = "Outcome",
+     xlim = c(0, 120), type = "l")
+abline(h = 0, lty = 2)
+abline(h = .5 + .9*(.5/(1-.9)), lty = 3)
+
+reg1 <- arima(s6$y[lim], c(1, 0, 0), include.mean = FALSE)
+reg2 <- arima(s6$y[lim], c(1, 0, 0), include.mean = TRUE)
+
+p1 <- predict(reg1, n.ahead = 20)
+p2 <- predict(reg2, n.ahead = 20)
+lines(s6$t[!lim], s6$y[!lim], col = "tomato", lwd = 2)
+lines(p1$pred, col = "dodgerblue")
+lines(p2$pred, col = "mediumseagreen")
+
+legend("topleft", bty = "n", lty = 1, horiz = T,
+       legend = c("No Intercept", "Intercept"),
+       col = c("dodgerblue", "mediumseagreen"))
+```
+
+## Forecasting with AR(p) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(s6$t[lim], s6$y[lim],     
+     xlab = "Time", ylab = "Outcome",
+     xlim = c(0, 120), type = "l",
+     ylim = c(min(p1$pred - 1.645*p1$se,
+                  p2$pred - 1.645*p2$se,
+                  s6$y),
+              max(p1$pred + 1.645*p1$se,
+                  p2$pred + 1.645*p2$se,
+                  s6$y)))
+abline(h = 0, lty = 2)
+abline(h = .5 + .9*(.5/(1-.9)), lty = 3)
+
+lines(s6$t[!lim], s6$y[!lim], col = "tomato", lwd = 2)
+lines(p1$pred, col = "dodgerblue")
+lines(p1$pred + 1.645*p1$se, col = "dodgerblue", lty = 2)
+lines(p1$pred - 1.645*p1$se, col = "dodgerblue", lty = 2)
+
+lines(p2$pred, col = "mediumseagreen")
+lines(p2$pred + 1.645*p2$se, col = "mediumseagreen", lty = 2)
+lines(p2$pred - 1.645*p2$se, col = "mediumseagreen", lty = 2)
+
+legend("topleft", bty = "n", lty = 1,
+       legend = c("No Intercept", "Intercept"),
+       col = c("dodgerblue", "mediumseagreen"))
+```
+
+## Forecasting with AR(p) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(s6$t[lim], s6$y[lim],
+     xlab = "Time", ylab = "Outcome",
+     xlim = c(0, 120), type = "l",
+     ylim = c(min(p1$pred - 1.645*p1$se,
+                  p2$pred - 1.645*p2$se,
+                  s6$y),
+              max(p1$pred + 1.645*p1$se,
+                  p2$pred + 1.645*p2$se,
+                  s6$y)))
+abline(h = 0, lty = 2)
+abline(h = .5 + .9*(.5/(1-.9)), lty = 3)
+
+polygon(x = c(101:120, 120:101),
+        y = c(p1$pred - 1.645*p1$se,
+              rev(p1$pred + 1.645*p1$se)),
+        border = NA,
+        col = scales::alpha("dodgerblue", .2))
+polygon(x = c(101:120, 120:101),
+        y = c(p2$pred - 1.645*p2$se,
+              rev(p2$pred + 1.645*p2$se)),
+        border = NA,
+        col = scales::alpha("mediumseagreen", .2))
+
+lines(s6$t[!lim], s6$y[!lim], col = "tomato", lwd = 2)
+lines(p1$pred, col = "dodgerblue", lwd = 2)
+lines(p2$pred, col = "mediumseagreen", lwd = 2)
+
+legend("topleft", bty = "n", lty = 1,
+       legend = c("No Intercept", "Intercept"),
+       col = c("dodgerblue", "mediumseagreen"))
+```
+
+# Moving Average
+
+## Moving Average
+
+$$Y_t = \epsilon_t + \theta \epsilon_{t-1}$$
+where $\theta$ describes serial correlation, and $\epsilon_t$ is white noise.
+
+. . .
+
+Mean:
+
+$$E[\epsilon_t + \theta \epsilon_{t-1}] = E[\epsilon_t] + \theta E[ \epsilon_{t-1}] = 0$$
+
+Variance:
+
+$$\text{var}(\epsilon_t + \theta \epsilon_{t-1}) = \sigma^2 + \theta^2 \sigma^2 = (1 + \theta^2)\sigma^2$$
+
+## Conditional Moving Average
+
+Conditional Mean:
+
+$$E[Y_t | \Omega_{t-1}] = E[\epsilon_t + \theta \epsilon_{t-1}] = \theta \epsilon_{t-1}$$
+- Therefore, the forecast error ($Y_t - E[Y_t | \Omega_{t-1}]$) is: $\epsilon_t$.
+
+- In addition, the forecast variance is equal to the conditional variance of $\sigma^2$.
+
+## MA Autocovariance
+
+$$\gamma(1) = E[(\epsilon_{t} + \theta \epsilon_{t-1})(\epsilon_{t-1} + \theta \epsilon_{t-2})] $$
+
+. . .
+
+Because white noise has no serial correlation...
+
+$$\gamma(1) = \theta \sigma^2$$
+
+Similarly, $\gamma(k) = 0 \ \forall \ k > 1$.
+
+## MA Autocorrelation
+
+$$\rho(1) = \frac{\gamma(1)}{\gamma(0)} = \frac{\theta \sigma^2}{(1 + \theta^2) \sigma^2} = \frac{\theta}{1+\theta^2}$$
+
+. . .
+
+$$\rho(k) = 0 \ \forall \ k > 1$$
+
+. . .
+
+$$\rho(1) \in (\frac{-1}{2}, \frac{1}{2})$$
+
+## MA $\theta$ Criteria
+
+$$Y_t = e_t + \theta e_{t-1} \implies e_t = Y_t + \theta e_{t-1}$$
+
+$$\begin{align}
+e_t = Y_t - \theta e_{t-1} \implies &e_{t-1} = Y_{t-1} - \theta e_{t-2}
+\\ &e_{t} = Y_t - \theta Y_{t-1} + \theta^2 e_{t-2}
+\\ &e_{t} = Y_t - \theta Y_{t-1} + \theta^2 Y_{t-2} - \theta^3e_{t-3}
+\end{align}$$
+
+$$\begin{align}
+Y_t &= \theta Y_{t-1} - \theta^2Y_{t-2} + \theta^3Y_{t-3} + \ ... \ + \ e_{t}
+\\ &= -\sum_{i = 1}^{\infty} (-\theta)^iY_{t-i} + e_{t}
+\end{align}$$
+
+Similarly, this only converges if $|\theta|$ < 1.
+
+## Optimal Forecast
+
+See Hansen's Lecture #9 for the formal recursive forecast.
+
+We will use R's `arima()` function as shown above.
+
+## Comparing AR and MA
+
+AR(1) $\implies \rho(k) = \beta^k \ \forall \ k$
+
+MA(1) $\implies \rho(k) = 0 \ \forall \ k>1$
+
+## ACF for AR(1)
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000)
+for(i in 1:10000) df$y[df$t == i] <- (.9*df$y[df$t == i-1]) + rnorm(1)
+acf(df$y)
+abline(h = .9, lty = 2)
+```
+
+## PACF for AR(1)
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## ACF for AR(2)
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000)
+for(i in 2:10000) df$y[df$t == i] <- (.5*df$y[df$t == i-1]) + (.3*df$y[df$t == i-2]) + rnorm(1)
+acf(df$y)
+```
+
+## PACF for AR(2)
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## ACF for AR(2) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000)
+for(i in 2:10000) df$y[df$t == i] <- (.5*df$y[df$t == i-1]) + (-.3*df$y[df$t == i-2]) + rnorm(1)
+acf(df$y)
+```
+
+## PACF for AR(2) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## ACF for MA(1)
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000, shocks = c(0, rnorm(10000)))
+for(i in 1:10000) df$y[df$t == i] <- df$shocks[df$t == i] + .7*df$shocks[df$t == (i-1)]
+acf(df$y)
+abline(h = .7/(1+(.7^2)), lty = 2)
+```
+
+## PACF for MA(1)
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## ACF for MA(2)
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000, shocks = c(0, rnorm(10000)))
+for(i in 2:10000) df$y[df$t == i] <- df$shocks[df$t == i] + .5*df$shocks[df$t == (i-1)] + .3*df$shocks[df$t == (i-2)]
+acf(df$y)
+```
+
+## PACF for MA(2)
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## ACF for MA(2) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+df <- data.frame(y = rep(0, 10001), t = 0:10000, shocks = c(0, rnorm(10000)))
+for(i in 2:10000) df$y[df$t == i] <- df$shocks[df$t == i] + .5*df$shocks[df$t == (i-1)] - .3*df$shocks[df$t == (i-2)]
+acf(df$y)
+```
+
+## PACF for MA(2) {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+pacf(df$y)
+```
+
+## Forecasting with MA(1)
+
+```{r}
+#| code-fold: true
+s6 <- data.frame(y = rep(0, 121), t = 0:120, shocks = c(0, rnorm(120)))
+for(i in 1:120) s6$y[s6$t == i] <- s6$shocks[s6$t == i] + .7*s6$shocks[s6$t == (i-1)]
+s6$horizon <- ifelse(s6$t >= 101, 1, 0)
+
+lim <- s6$horizon == 0
+plot(s6$t[lim], s6$y[lim],
+     xlab = "Time", ylab = "Outcome",
+     xlim = c(0, 120), type = "l")
+abline(h = 0, lty = 2)
+abline(h = .5 + .9*(.5/(1-.9)), lty = 3)
+
+reg1 <- arima(s6$y[lim], c(0, 0, 1), include.mean = FALSE)
+reg2 <- arima(s6$y[lim], c(1, 0, 0), include.mean = FALSE)
+
+p1 <- predict(reg1, n.ahead = 20)
+p2 <- predict(reg2, n.ahead = 20)
+lines(s6$t[!lim], s6$y[!lim], col = "tomato", lwd = 2)
+
+lines(p1$pred, col = "dodgerblue")
+lines(p1$pred + 1.645*p1$se, col = "dodgerblue", lty = 2)
+lines(p1$pred - 1.645*p1$se, col = "dodgerblue", lty = 2)
+
+lines(p2$pred, col = "mediumseagreen")
+lines(p2$pred + 1.645*p2$se, col = "mediumseagreen", lty = 2)
+lines(p2$pred - 1.645*p2$se, col = "mediumseagreen", lty = 2)
+
+legend("bottomleft", bty = "n", lty = 1, horiz = T,
+       legend = c("MA(1)", "AR(1)"),
+       col = c("dodgerblue", "mediumseagreen"))
+```
+
+## Comparing AR and MA
+
+```{r}
+#| results: asis
+#| echo: false
+df <- data.frame("Process" = c("AR(p)", "", "MA(q)", "", "ARMA(p,q)"), 
+                 "ACF" = c("Decaying/Oscillating", "", "0 for k > p", "", "Decaying/Oscillating<br>after lag max(0, q-p)"), 
+                 "PACF" = c("0 for k > q", "", "Decaying/Oscillating", "", "Decaying/Oscillating<br>after lag max(0, p-q)"))
+
+# stargazer::stargazer(df, type = "html",
+#                      summary = FALSE, rownames = FALSE)
+
+knitr::kable(df)
+```
+
+
+
+```{=latex}
+\begin{table}[]
+\label{tab:my-table}
+\begin{tabular}{lcc}
+          & ACF                                                                                  & PACF                                                                                 \\
+AR(p)     & Decaying/Oscillating                                                                 & 0 for k \textgreater p                                                               \\
+MA(q)     & 0 for k \textgreater q                                                               & Decaying/Oscillating                                                                 \\
+ARMA(p,q) & \begin{tabular}[c]{@{}c@{}}Decaying/Oscillating\\ after lag max(0, q-p)\end{tabular} & \begin{tabular}[c]{@{}c@{}}Decaying/Oscillating\\ after lag max(0, p-q)\end{tabular}
+\end{tabular}
+\end{table}
+```
+
+# Exam Review
+
+## Exam Topics
+
+- Data Cleaning
+
+- Data Visualization
+
+- Estimate, Interpret, Forecast, and Evaluate:
+    - Intercept
+    - Trend
+    - Kink
+    - AR
+    - MA
+
+
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture7.pdf -->
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture8.pdf -->
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture9.pdf -->
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture10.pdf -->
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture11.pdf -->
+<!-- file:///C:/Users/alexc/Dropbox/teaching/Fall%202022/econ707/notes_adam/hansen/390Lecture12.pdf -->
+
