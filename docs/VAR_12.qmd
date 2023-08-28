@@ -1,0 +1,888 @@
+---
+title: "Vector Autoregression"
+subtitle: "Week 12"
+author: "Alex Cardazzi"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    # chalkboard: true
+
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: "https://ww1.odu.edu/facultystaff/communication/toolkit/current-logos/_jcr_content/par/section_1593932067/columns_527553970/column_2/image.img.440.jpg/1599596551953.jpg"
+    footer: "ECON 707/807: Econometrics II"
+    
+self-contained: true
+# embed-resources: true
+# standalone: true
+
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(out.width = '90%')
+
+par(mar = c(4.1, 4.1, 1.1, 4.1))
+set.seed(321)
+library("stargazer")
+library("lubridate")
+library("forecast")
+library("scales")
+library("tseries")
+
+colorize <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'>%s</span>", color,
+      x)
+  } else x
+}
+```
+
+## Topics
+
+- Vector Autoregression
+
+## Autoregression
+
+$$Y_t = f(Y_{t-1}, ..., Y_{t-p})$$
+
+- AR(p) models suggest the history of some variable will teach us about its future.
+- We use ```adf.test()``` to test for stationarity.
+- We use ```acf()``` and ```pacf()``` to examine the lag structure.
+- ```auto.arima``` is our friend.
+- But what about other factors?
+
+## Distributed Lag Models
+
+$$\begin{align}Y_t = f(&Y_{t-1}, ..., Y_{t-p},\\
+&X_{t-1}, ..., X_{t-q})\end{align}$$
+
+- ARDL(p, q) models suggest the history of *another* variable will teach us about our variable's future.
+- We still need stationarity and a lag structure.
+- To forecast with this, we often need multiple equations/models.
+
+## Vector Autoregression
+
+Chris Sims's [Macroeconomics and Reality](https://www.jstor.org/stable/pdf/1912017.pdf?refreqid=excelsior%3A88e267b16d6cfe1c35253eb5cf57ab5d&ab_segments=&origin=&acceptTC=1) (1980) was hugely influential in empirical macroeconomics.
+
+- Previously, most people would use ARDL type models.
+- The issue with these models is that they do not allow for "feedback".
+
+## Vector Autoregression {visibility="uncounted"}
+
+Motivation:
+
+$$Y_{t} = \alpha_{11} Y_{t-1} + \beta_{11} X_{t-1} + e_{1t}$$
+
+- $X$ "causes" $Y$, but $Y$ cannot influence $X$.
+
+::: aside
+Of course, there are times where this is legitimate.
+:::
+
+## Vector Autoregression {visibility="uncounted"}
+
+Solution:
+
+$$Y_{t} = \alpha_{1} Y_{t-1} + \beta_{1} X_{t-1} + e_{1t}$$
+$$X_{t} = \alpha_{2} Y_{t-1} + \beta_{2} X_{t-1} + e_{2t}$$
+
+. . .
+
+Now we can model $X$ and $Y$ as functions of past values of one another.
+
+. . .
+
+This will allow for this "feedback".
+
+## Vector Autoregression {visibility="uncounted"}
+
+Of course, errors to this system might be correlated.  Therefore, we must decompose them into independent shocks.
+
+. . .
+
+$$\begin{align} e_{1t} &= u_{1t} \\
+e_{2t} &= \rho e_{1t} + u_{2t} \\ 
+ &= \rho u_{1t} + u_{2t} \end{align}$$
+
+## Vector Autoregression {visibility="uncounted"}
+
+Solution:
+
+$$\begin{align}Y_{t} &= \alpha_{1} Y_{t-1} + \beta_{1} X_{t-1} + u_{1t}\\
+X_{t} &= \alpha_{2} Y_{t-1} + \beta_{2} X_{t-1} + \rho u_{1t} + u_{2t}\end{align}$$
+
+. . .
+
+*Important*: this ordering has implications on your model.  Here, shocks to $Y$ impact both $Y$ and $X$ at the same time.  However, a shock to $X$ only gets to $Y$ next period through the lagged $X$.
+
+## Vector Autoregression {visibility="uncounted" .smaller}
+
+How do we estimate these models in R?
+
+. . .
+
+Use the package ```vars``` ([reference manual](https://cran.r-project.org/web/packages/vars/vars.pdf))
+
+```{r echo=FALSE}
+library("vars")
+```
+
+. . .
+
+```VAR()``` is the main function
+
+- ```y```: the dataset (a ```ts``` object)
+- ```p```: number of lags
+- ```lag.max```: determines the highest lag when auto-selecting
+- ```type```: "none", "const", "trend", "both"
+- ```season```: integer telling the frequency
+- ```exogen```: exogenous variables (no feedback)
+
+## Vector Autoregression {visibility="uncounted" .smaller}
+
+How do we estimate these models in R?
+
+Use the package ```vars``` ([reference manual](https://cran.r-project.org/web/packages/vars/vars.pdf))
+
+```restrict()``` is a function to estimate restricted VARs
+
+- ```x```: a fitted object from ```VAR()```
+- ```method```: "ser" (automatic based on significance) or "manual"
+
+## Vector Autoregression {visibility="uncounted" .smaller}
+
+How do we estimate these models in R?
+
+Use the package ```vars``` ([reference manual](https://cran.r-project.org/web/packages/vars/vars.pdf))
+
+```VARselect()``` is a function to help select lag length
+
+- Use the same things as in ```VAR()```.
+
+## Vector Autoregression {visibility="uncounted" .smaller}
+
+How do we estimate these models in R?
+
+Use the package ```vars``` ([reference manual](https://cran.r-project.org/web/packages/vars/vars.pdf))
+
+```irf()``` is a function to help you interpret VAR output.  There are many coefficients that are very difficult to interpret, so ```irf()``` will guide your interpretation.
+
+## Vector Autoregression {visibility="uncounted" .smaller}
+
+How do we estimate these models in R?
+
+Use the package ```vars``` ([reference manual](https://cran.r-project.org/web/packages/vars/vars.pdf))
+
+```SVAR()``` is a function to estimate a structural VAR.  This is ultimately beyond the scope of the course, but used in more "serious" macroeconomics.
+
+## VAR Simulation {.smaller}
+
+```{r}
+#| code-fold: show
+N <- 200
+y <- rep(0, N)
+x <- rep(0, N)
+shocksy <- rnorm(N, sd = .2)
+shocksx <- .5*shocksy + rnorm(N, sd = .2)
+for(i in 3:N){
+  
+  y[i] <- .4*y[i-1] - .2*y[i-2] - .3*x[i-1] + .6*x[i-2] + shocksy[i]
+  x[i] <- .5*y[i-1] - .5*y[i-2] + .5*x[i-1] + .4*x[i-2] + shocksx[i]
+}
+
+sim <- ts(cbind(y, x), start = 1, frequency = 1)
+head(sim)
+```
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+par(mfrow = c(1, 2))
+plot(y, type = "l"); plot(x, type = "l")
+```
+
+## VAR Simulation {visibility="uncounted"}
+
+```{r results='hold'}
+#| code-fold: show
+tseries::adf.test(sim[,1])
+tseries::adf.test(sim[,2])
+```
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### ACF
+```{r}
+#| code-fold: true
+acf(sim)
+```
+
+### PCF
+```{r}
+#| code-fold: true
+pacf(sim)
+```
+
+:::
+
+## VAR Simulation {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+lagz <- VARselect(sim)
+lagz$selection
+```
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+# y[i] <- .4*y[i-1] - .2*y[i-2] - .3*x[i-1] + .6*x[i-2] + shocksy[i]
+# x[i] <- .5*y[i-1] - .5*y[i-2] + .5*x[i-1] + .4*x[i-2] + shocksx[i]
+reg <- VAR(sim, p = 2, season = NULL, type = "none", exogen = NULL); reg
+```
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### Shock to Y on Y
+```{r}
+#| code-fold: show
+impulse <- irf(reg, impulse = "y", response = "y")
+plot(impulse)
+```
+
+### Shock to Y on X
+```{r}
+#| code-fold: show
+impulse <- irf(reg, impulse = "y", response = "x")
+plot(impulse)
+```
+
+### Shock to X on Y
+```{r}
+#| code-fold: show
+impulse <- irf(reg, impulse = "x", response = "y")
+plot(impulse)
+```
+
+### Shock to X on X
+```{r}
+#| code-fold: show
+impulse <- irf(reg, impulse = "x", response = "x")
+plot(impulse)
+```
+
+:::
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+Variance Decomposition: % of variance due to the other variable
+
+```{r}
+#| code-fold: show
+plot(fevd(reg))
+```
+
+## VAR Simulation {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### Forecasting Y
+
+```{r}
+#| code-fold: true
+pred <- predict(reg, n.ahead = 20)
+plot(y, type = "l", xlim = c(1, N + 20))
+lines((N+1):(N+20), pred$fcst$y[,1], col = "tomato")
+```
+
+### Forecasting X
+
+```{r}
+#| code-fold: true
+pred <- predict(reg, n.ahead = 20)
+plot(x, type = "l", xlim = c(1, N + 20))
+lines((N+1):(N+20), pred$fcst$x[,1], col = "tomato")
+lines((N+1):(N+20), pred$fcst$x[,2], col = "tomato", lty = 2)
+lines((N+1):(N+20), pred$fcst$x[,3], col = "tomato", lty = 2)
+```
+
+### Fanchart X
+
+```{r}
+#| code-fold: true
+pred <- predict(reg, n.ahead = 20)
+fanchart(pred, names = "x")
+```
+
+:::
+
+# Los Angeles Air Quality
+
+## LA Air Quality {.smaller}
+
+There is an R package ```astsa``` (Applied Statistical Time Series Analysis) that accompanies two textbooks ([Time Series Analysis and Its Applications: With R Examples](http://www.stat.pitt.edu/stoffer/tsa4/); [Time Series: A Data Analysis Approach using R](http://www.stat.pitt.edu/stoffer/tsda/)).  We are going to use some data from this package.
+
+. . .
+
+These data are at the weekly level from Los Angeles County from 1970 - 1979
+
+- Average weekly cardiovascular mortality
+- Temperatures
+- Air Quality (pollution particulates)
+
+. . .
+
+```{r}
+#| code-fold: show
+
+# Average weekly cardiovascular mortality in Los Angeles County
+# 508 six-day smoothed averages: 1970-1979
+cmort <- astsa::cmort
+
+# Temperatures from LA pollution study
+tempr <- astsa::tempr
+
+# Air Quality (particulates) from LA pollution study
+part <- astsa::part
+```
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### Mortality
+
+```{r}
+#| code-fold: true
+plot(cmort)
+```
+
+### Temperature
+
+```{r}
+#| code-fold: true
+plot(tempr)
+```
+
+### Pollution
+
+```{r}
+#| code-fold: true
+plot(part)
+```
+
+:::
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+tseries::adf.test(cmort)
+tseries::adf.test(tempr)
+tseries::adf.test(part)
+```
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+la <- ts.union(cmort = cmort,
+               tempr = tempr,
+               part = part)
+```
+
+Order Assumptions:
+
+- A shock to mortality impacts mortality, temperature, and particles
+- A shock to temperature impacts temperature and particles
+- A shock to particles impacts particles
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+la <- ts.union(part = part,
+               tempr = tempr,
+               cmort = cmort)
+```
+
+Order Assumptions:
+
+- A shock to particles impacts particles, temperature, and mortality
+- A shock to temperature impacts temperature and mortality
+- A shock to mortality impacts mortality
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### ACF
+```{r}
+#| code-fold: true
+acf(la, lag.max = 52)
+```
+
+### PCF
+```{r}
+#| code-fold: true
+pacf(la, lag.max = 52)
+```
+
+:::
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+
+lagz <- VARselect(la,          # dataset
+                  lag.max = 26,# half-year lags as a max
+                  season = 52) # controlling for seasonality via week FEs
+lagz$selection
+```
+
+
+
+
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+reg <- VAR(la, p=5, type="both", season = 52)
+summary(reg)
+```
+
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+Plot these in RStudio:
+
+```{r eval=FALSE}
+#| code-fold: show
+impulse <- irf(reg)
+plot(impulse)
+```
+
+Make predictions:
+
+```{r}
+#| code-fold: show
+H <- 26
+p <- predict(reg, n.ahead = H)
+
+xlimz <- c(min(time(cmort)), max(time(cmort)) + (H/52))
+xz <- seq(max(time(cmort)) + (1/52), max(time(cmort)) + (H/52), 1/52)
+```
+
+
+## LA Air Quality {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### Mortality
+```{r}
+#| code-fold: true
+plot(cmort, xlim = xlimz)
+lines(xz, p$fcst$cmort[,1], col = "tomato")
+```
+
+### Temperature
+```{r}
+#| code-fold: true
+plot(tempr, xlim = xlimz)
+lines(xz, p$fcst$tempr[,1], col = "tomato")
+```
+
+### Air Quality
+```{r}
+#| code-fold: true
+plot(part, xlim = xlimz)
+lines(xz, p$fcst$part[,1], col = "tomato")
+```
+:::
+
+# AIDS
+
+## AIDS Deaths
+
+```{r}
+#| code-fold: true
+tmp3 <- readRDS("../data/aids.RDS")
+
+tmp <- aggregate(list(death = tmp3$deaths,
+                      diag = tmp3$diag),
+                 list(month = tmp3$month),
+                 sum, na.rm = TRUE)
+ifelse(tmp$death == 0, NA, tmp$death) -> tmp$death
+ifelse(tmp$diag == 0, NA, tmp$diag) -> tmp$diag
+tmp <- tmp[year(tmp$month) >= 1987,]
+
+lim1 <- tmp$month <= ymd("1994-04-01") & !is.na(tmp$death)
+
+plot_all <- function(months = 0){
+  
+  plot(tmp$month, tmp$diag, type = "n",
+       xlab = "Month", ylab = "Quantity",
+       xlim = c(min(tmp$month), ymd("1999-01-01")))
+  lines(tmp$month[lim1], tmp$diag[lim1], type = "l", col = "black", lwd = 3)
+  lines(tmp$month[lim1] - months(months), tmp$death[lim1], col = "dodgerblue", lwd = 3)
+  abline(v = ymd(c("1994-04-15")), lty = c(2))
+  legend("topright", bty = "n", col = c("black", "dodgerblue"), lty = 1,
+         legend = c("Diagnoses", "Deaths"), lwd = 2)
+}
+
+aids_ts <- ts(tmp[lim1,3:2], start = c(min(year(tmp$month[lim1]))), frequency = 12)
+reg1 <- auto.arima(aids_ts[,"death"])
+H <- 24
+p1 <- predict(reg1, n.ahead = H)
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      p1$pred, col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H], col = "mediumseagreen", lwd = 3)
+legend("bottomright", bty = "n", col = c("tomato", "mediumseagreen"), lty = 1,
+       legend = c("ARIMA", "Actual"), lwd = 2)
+```
+
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+ARIMA is fine so long as nothing about the system changes.  There is a clear change in diagnoses, which should change death outcomes.
+
+. . .
+
+Let's use VAR to forecast deaths.
+
+::: aside
+We are going to throw stationarity to the wind for a moment.
+:::
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+First, let's select a lag for our model.
+
+. . .
+
+```{r}
+#| code-fold: show
+
+lagz <- VARselect(aids_ts, lag.max = 36)
+lagz$selection
+```
+
+. . .
+
+It seems to want 26 lags.
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+reg <- VAR(aids_ts, p = 26, type = "both")
+summary(reg)
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+
+p <- predict(reg, n.ahead = H)
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      p$fcst$death[,1], col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H], col = "mediumseagreen", lwd = 3)
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+reg <- restrict(reg, "ser")
+summary(reg)
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+
+p <- predict(reg, n.ahead = H)
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      p$fcst$death[,1], col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H], col = "mediumseagreen", lwd = 3)
+```
+
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+mape <- function(a, f) mean(abs((a-f)/a))
+
+cbind(VAR = round(mape(tmp$death[!lim1][1:H], p$fcst$death[,1]), 4)*100, # VAR
+      ARIMA = round(mape(tmp$death[!lim1][1:H], p1$pred), 4)*100, # ARIMA
+      Average = round(mape(tmp$death[!lim1][1:H], (p1$pred + p$fcst$death[,1])/2), 4)*100) # VAR
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      (p1$pred + p$fcst$death[,1])/2,
+      col = alpha("tomato", 1), lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      (p1$pred),
+      col = alpha("grey", .6), lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      (p$fcst$death[,1]),
+      col = alpha("orchid", .6), lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H],
+      col = alpha("mediumseagreen", 1), lwd = 3)
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+ts.union(death = aids_ts[,2],
+         diag = aids_ts[,1],
+         deathd = diff(diff(log(aids_ts[,2]), lag = 12)),
+         diagd = diff(diff(log(aids_ts[,1]), lag = 12))) -> aids_ts2
+
+lim <- 14:nrow(aids_ts)
+lagz <- VARselect(aids_ts2[lim,4:3], lag.max = 36)
+# lagz$selection
+
+reg <- VAR(aids_ts2[lim,4:3], p = 19, type = "both")
+reg <- restrict(reg, "ser")
+
+p <- predict(reg, n.ahead = H)
+
+lim2 <- tmp$month[14:nrow(tmp)] < ymd("1994-05-01")
+plot(tmp$month[14:nrow(tmp)][lim2],
+     diff(diff(log(tmp$diag), lag = 12))[lim2],
+     type = "n",
+     xlab = "Month", ylab = "Percent Change in Quantity",
+     xlim = c(min(tmp$month), ymd("1998-01-01")))
+lines(tmp$month[14:nrow(tmp)][lim2],
+      diff(diff(log(tmp$diag), lag = 12))[lim2],
+      type = "l", col = "black", lwd = 3)
+lines(tmp$month[14:nrow(tmp)][lim2],
+      diff(diff(log(tmp$death), lag = 12))[lim2],
+      col = "dodgerblue", lwd = 3)
+
+lines(tmp$month[!lim1][1:H],
+      p$fcst$death[,1], col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      diff(diff(log(tmp$death[c(which(!lim1)[1:H][1] - 13:1, which(!lim1)[1:H])]), lag = 12)),
+      col = "mediumseagreen", lwd = 3)
+
+auto.arima(ts(aids_ts2[14:nrow(aids_ts2),"deathd"],
+              start = c(1998, 2), frequency = 12)) -> reg2
+lines(tmp$month[!lim1][1:H],
+      predict(reg2, n.ahead = 24)$pred,
+      col = "orchid", lwd = 3)
+
+legend("topright", bty = "n", col = c("black", "dodgerblue"), lty = 1,
+         legend = c("Diagnoses", "Deaths"), lwd = 2)
+```
+
+## AIDS Deaths {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: show
+
+cbind(VAR = round(mape(diff(diff(log(tmp$death[c(which(!lim1)[1:H][1] - 13:1, which(!lim1)[1:H])]), lag = 12)), p$fcst$death[,1]), 4)*100, # VAR
+      ARIMA = round(mape(diff(diff(log(tmp$death[c(which(!lim1)[1:H][1] - 13:1, which(!lim1)[1:H])]), lag = 12)), predict(reg2, n.ahead = 24)$pred), 4)*100) # ARIMA
+
+```
+
+# Coefficient Dynamics
+
+## Coefficient Dynamics
+
+Thus far, we have assumed that the relationship between $Y$ and $X$ remains constant over time.
+
+. . .
+
+However, this is not always the case.
+
+- $\text{Weight} = f(\text{Height})$ ([Link](https://runrepeat.com/height-evolution-in-the-nba))
+- $\text{Unemployment} = f(\text{Inflation})$ (Phillips Curve)
+
+## Phillips Curve {visibility="uncounted"}
+
+<center>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=WtqU&width=960&height=500" scrolling="no" frameborder="0" style="width:960px; height:500px;" allowTransparency="true" loading="lazy" data-external="1"></iframe>
+</center>
+
+## Phillips Curve {visibility="uncounted"}
+
+<center>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=WtqX&width=960&height=500" scrolling="no" frameborder="0" style="width:960px; height:500px;" allowTransparency="true" loading="lazy" data-external="1"></iframe>
+</center>
+
+## Coefficient Dynamics {visibility="uncounted"}
+
+At a high level, there are a few ways to test, and account, for *structural breaks*.
+
+- Chow Break Test (```strucchange```)
+- Rolling Regression (```rollRegres```, note the one s)
+
+. . . 
+
+Of course, you might want to identify breaks, but you might also want to rule them out and demonstrate the stability of your model.  Both of these can help with this as well.
+
+## Chow Break Test {.smaller}
+
+$$\frac{\Big(\frac{RSS_p - (RSS_1 + RSS_2)}{k}\Big)}{\Big(\frac{RSS_1 + RSS_2}{N_1 + N_2 - 2k}\Big)}$$
+
+- $RSS_p$: Residual Sum of Squares for the entire (pooled) regression
+- $RSS_1$: Residual Sum of Squares for the first section of data
+- $RSS_2$: Residual Sum of Squares for the second section of data
+- $k$: Number of Regressors
+
+## Chow Break Test  {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+N <- 200
+shocks <- rnorm(N)
+x <- rnorm(N)
+t1 <- 1:N
+t2 <- c(rep(0, .4*N), 1:(.6*N))
+
+y <- 3*x + t1 - t2 + shocks
+
+plot(t1, y, type = "l")
+```
+
+## Chow Break Test  {visibility="uncounted"}
+
+Testing for a break:
+
+```{r}
+#| code-fold: show
+strucchange::sctest(y ~ x, type = "Chow", point = 80)
+```
+
+. . .
+
+But what if you don't know where exactly the break happens?
+
+## Chow Break Test  {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+v <- rep(0, 180-20)
+for(i in 20:180){
+  
+  v[i-19] <- strucchange::sctest(y ~ x, type = "Chow", point = i)$statistic
+}
+```
+
+## Chow Break Test  {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(20:180, v, type = "b", pch = 19)
+```
+
+## Chow Break Test  {visibility="uncounted"}
+
+So what?
+
+- This can help you choose your analysis sample.
+- This can inform you of breaks you might want to model.
+    - Remember: break models, trend models, kink models, etc.
+    
+## Rolling Regression
+
+Rolling regression is another tool to help you diagnose breaks or general dynamics in your model.
+
+. . .
+
+There are two ways you might use rolling regression:
+
+- Shifting Window
+- Expanding Window
+
+## Rolling Regression {visibility="uncounted"}
+
+```{r}
+# shifiting window:
+r1 <- rollRegres::roll_regres(y ~ x + t1, width = 25L, do_downdates = TRUE)
+# expanding window:
+r2 <- rollRegres::roll_regres(y ~ x + t1, width = 25L, do_downdates = FALSE)
+par(mfrow = c(1, 2))
+plot(r1$coefs[,"t1"], type = "b", pch = 19, main = "Shifting Window", ylim = c(-.1, 1.1))
+plot(r2$coefs[,"t1"], type = "b", pch = 19, main = "Expanding Window", ylim = c(-.1, 1.1))
+```
+
+
+## Next Classes
+::: {.nonincremental}
+
+:::: {.columns}
+
+::: {.column width="40%"}
+**Today**:
+
+Please Submit Project Data!!
+
+**11/23**:
+
+- No Class
+:::
+
+::: {.column width="50%"}
+**11/30**:
+
+- Spatial Autocorrelation
+- Project Help
+
+**12/7**:
+
+- Final Presentations
+:::
+
+::::
+
+:::

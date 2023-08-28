@@ -1,0 +1,974 @@
+---
+title: "X Variables"
+subtitle: "Week 11"
+author: "Alex Cardazzi"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    # chalkboard: true
+
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: "https://ww1.odu.edu/facultystaff/communication/toolkit/current-logos/_jcr_content/par/section_1593932067/columns_527553970/column_2/image.img.440.jpg/1599596551953.jpg"
+    footer: "ECON 707/807: Econometrics II"
+    
+self-contained: true
+# embed-resources: true
+# standalone: true
+
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(out.width = '90%')
+
+par(mar = c(4.1, 4.1, 1.1, 4.1))
+set.seed(321)
+library("stargazer")
+library("lubridate")
+library("forecast")
+library("scales")
+library("tseries")
+
+colorize <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'>%s</span>", color,
+      x)
+  } else x
+}
+```
+
+## Topics
+
+- Distributed Lag Models
+- Spurious Regression
+- Cointegration
+
+<!-- ## AR(1) vs MA(1) -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+
+<!-- N <- 100 -->
+<!-- shocks <- rnorm(N) -->
+<!-- shocks[50] <- 50 + shocks[50] -->
+
+<!-- y <- rep(0, N) -->
+<!-- for(i in 2:N) y[i] <- .8*y[i-1] + shocks[i] -->
+<!-- plot(y, type = "b", col = "tomato", pch = 20, -->
+<!--      xlab = "t", ylab = "y") -->
+<!-- yar1 <- y -->
+
+<!-- y <- rep(0, N) -->
+<!-- for(i in 2:N) y[i] <- .8*shocks[i-1] + shocks[i] -->
+<!-- lines(y, col = "dodgerblue", type = "b", pch = 20) -->
+<!-- yma1 <- y -->
+
+<!-- legend("topleft", bty = "n", pch = 20, lty = 1, -->
+<!--        col = c("tomato", "dodgerblue"), -->
+<!--        legend = c(expression("AR(1): "~Y[t]~"="~.8*Y[t-1]~"+"~e[t]), -->
+<!--                   expression("MA(1): "~Y[t]~"="~.8*e[t-1]~"+"~e[t]))) -->
+<!-- ``` -->
+
+<!-- ## AR(1) vs MA(1) -->
+
+<!-- ```{r fig.show = 'hold'} -->
+<!-- #| code-fold: true -->
+<!-- par(mfrow = c(2,2)) -->
+<!-- acf(yar1, main = "AR(1)"); pacf(yar1, main = "AR(1)") -->
+<!-- acf(yma1, main = "MA(1)"); pacf(yma1, main = "MA(1)") -->
+<!-- par(mfrow = c(1,1)) -->
+<!-- ``` -->
+
+## GDP and the Yield Curve
+
+<center>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=WbvQ&width=width=960&height=500" scrolling="no" frameborder="0" style="width:960px; height:500px;" allowTransparency="true" loading="lazy" data-external="1"></iframe>
+</center>
+
+## GDP and the Yield Curve {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+tmp <- read.csv("../data/fredgraph (2).csv")
+colnames(tmp) <- c("DATE", "gdp_pc", "ir3m", "ir10y", "gdp")
+rbind(head(tmp, 5), tail(tmp, 5))
+```
+
+## GDP and the Yield Curve {visibility="uncounted"}
+
+Once you have your data, you might need to add/modify variables.
+
+- Do this *before* converting to a ```ts()``` object.
+
+. . .
+
+```{r results='hold'}
+#| code-fold: show
+tmp$spread <- tmp$ir10y - tmp$ir3m
+```
+
+## GDP and the Yield Curve {visibility="uncounted"}
+
+You can also do this after:
+
+. . .
+
+```{r results='hold'}
+#| code-fold: show
+tmp <- ts(tmp, start = c(1962, 1), frequency = 4)
+# ts.union vs ts.intersect
+tmp <- ts.union(tmp, spread = tmp[,"ir10y"] - tmp[,"ir3m"], dframe = FALSE)
+rbind(head(tmp, 3), tail(tmp, 3))
+
+colnames(tmp) <- gsub("tmp.", "", colnames(tmp))
+```
+
+```{r include=FALSE}
+tmp <- tmp[,-which(colnames(tmp) == "spread")[1]]
+```
+
+## Distributed Lags {visibility="uncounted"}
+
+What if you need to manipulate the data?
+
+. . .
+
+```{r}
+#| code-fold: show
+head(ts.union(y = tmp[,"gdp_pc"],
+              diff_y = diff(tmp[,"gdp"]),
+              pc_y = 100*diff(tmp[,"gdp"])/tmp[,"gdp"]), 10)
+```
+
+## GDP and the Yield Curve {visibility="uncounted"}
+
+```{r results='hold'}
+#| code-fold: true
+plot(tmp[,c("gdp_pc")], ylim = range(tmp[,c("gdp_pc", "spread")]),
+     col = alpha("tomato", .6), lwd = 2)
+lines(tmp[,"spread"], col = alpha("dodgerblue", .6), lwd = 2)
+abline(h = 0)
+legend("topright", lty = 1, col = c("tomato", "dodgerblue"),
+       legend = c("%C GDP", "Spread"), bty = "n")
+```
+
+## GDP and the Yield Curve {visibility="uncounted"}
+
+Check for stationarity:
+
+```{r results='hold'}
+#| code-fold: true
+adf.test(tmp[,"gdp_pc"])
+adf.test(tmp[,"spread"])
+```
+
+## {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### ACF
+
+```{r}
+#| code-fold: true
+acf(tmp[,c("gdp_pc", "spread")])
+```
+
+### PACF
+
+```{r}
+#| code-fold: true
+pacf(tmp[,c("gdp_pc", "spread")])
+```
+
+:::
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+There are two (main) options to estimating DL models:
+
+:::: {.columns}
+
+::: {.column width="50%"}
+```dynlm```, ```dynlm()```
+
+- Data can be a ```ts()``` object.
+- Lags are (IMO) more intuitive.
+- No method for prediction
+:::
+
+::: {.column width="50%"}
+```dLagM```, ```ardlDlm()```
+
+- Data must be a ```data.frame``` object.
+- Lags are less intuitive.
+- Cannot be (easily) used with ```stargazer```
+:::
+
+::::
+
+. . .
+
+```{r results='hide', warning=FALSE}
+#| code-fold: show
+library("dynlm")
+library("dLagM")
+```
+
+# ```dynlm```
+
+## Distributed Lags {visibility="uncounted"}
+
+Main model: ```dynlm()```
+
+- To use lags, use ```L()```
+    - ```L(var, i:j)```
+    - ```i:j``` is a vector for the lag structure.  This can be any vector.
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+```{r results='asis'}
+#| code-fold: show
+r1 <- dynlm(tmp[,"gdp_pc"] ~ tmp[,"spread"])
+r2 <- lm(tmp[,"gdp_pc"] ~ tmp[,"spread"])
+stargazer::stargazer(r1, r2, type = "html")
+```
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+```{r results='asis'}
+#| code-fold: show
+r1 <- dynlm(tmp[,"gdp_pc"] ~ tmp[,"spread"] + L(tmp[,"spread"]))
+r2 <- dynlm(tmp[,"gdp_pc"] ~ L(tmp[,"spread"], 0:1))
+r3 <- dynlm(gdp_pc ~ L(spread, 0:1), tmp)
+stargazer::stargazer(r1, r2, r3, type = "html")
+```
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+```{r results='asis'}
+#| code-fold: show
+r1 <- dynlm(gdp_pc ~ L(spread, 0), tmp)
+r2 <- dynlm(gdp_pc ~ L(spread, 0:4), tmp)
+r3 <- dynlm(gdp_pc ~ L(spread, 0:8), tmp)
+stargazer::stargazer(r1, r2, r3,
+                     add.lines = list(c("AIC",
+                                        round(AIC(r1), 2),
+                                        round(AIC(r2), 2),
+                                        round(AIC(r3), 2))),
+                     omit.stat = c("ser", "f"),
+                     type = "html")
+```
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+```{r results='asis'}
+#| code-fold: show
+r1 <- dynlm(gdp_pc ~ L(spread, 0),
+            ts(tmp[9:212,], end = c(2014, 4), frequency = 4))
+r2 <- dynlm(gdp_pc ~ L(spread, 0:4),
+            ts(tmp[5:212,], end = c(2014, 4), frequency = 4))
+r3 <- dynlm(gdp_pc ~ L(spread, 0:8), tmp)
+stargazer::stargazer(r1, r2, r3,
+                     add.lines = list(c("AIC",
+                                        round(AIC(r1), 2),
+                                        round(AIC(r2), 2),
+                                        round(AIC(r3), 2))),
+                     omit.stat = c("ser", "f"),
+                     type = "html")
+```
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+```{r results='asis'}
+#| code-fold: show
+r1 <- dynlm(gdp_pc ~ L(gdp_pc, 1:2), tmp)
+r2 <- dynlm(gdp_pc ~ L(spread, 0:2), tmp)
+r3 <- dynlm(gdp_pc ~ L(gdp_pc, 1:2) + L(spread, 0:2), tmp)
+stargazer::stargazer(r1, r2, r3,
+                     add.lines = list(c("AIC",
+                                        round(AIC(r1), 2),
+                                        round(AIC(r2), 2),
+                                        round(AIC(r3), 2))),
+                     omit.stat = c("ser", "f"),
+                     type = "html")
+```
+
+# ```dLagM```
+
+## Distributed Lags {visibility="uncounted"}
+
+Main model: ```ardlDlm()```
+
+- To use lags, use ```p``` and ```q```.
+    - ```p``` denotes lags of $X$
+    - ```q``` denotes lags of $Y$
+    - use ```remove``` to omit lags you are uninterested in.
+
+## Distributed Lags {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### DL(2)
+
+```{r}
+#| code-fold: true
+rmv.q <- c(1) # y-vars
+rmv.p <- list(spread = c()) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+r1 <- ardlDlm(formula = gdp_pc ~ spread,
+              data = as.data.frame(tmp),
+              p = 2,
+              q = 1,
+              remove = rmv)
+summary(r1)
+```
+
+### AR(2)
+
+```{r}
+#| code-fold: true
+rmv.q <- c() # y-vars
+rmv.p <- list(spread = c(1)) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+r2 <- ardlDlm(formula = gdp_pc ~ spread,
+              data = as.data.frame(tmp),
+              p = 1,
+              q = 2,
+              remove = rmv)
+summary(r2)
+```
+
+### ARDL(2,2)
+
+```{r}
+#| code-fold: true
+rmv.q <- c() # y-vars
+rmv.p <- list(spread = c()) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+r3 <- ardlDlm(formula = gdp_pc ~ spread,
+              data = as.data.frame(tmp),
+              p = 2,
+              q = 2,
+              remove = rmv)
+summary(r3)
+```
+
+### ARDL(2,2)$^*$
+
+```{r}
+#| code-fold: true
+rmv.q <- c(1) # y-vars
+rmv.p <- list(spread = c(0,1)) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+r4 <- ardlDlm(formula = gdp_pc ~ spread,
+              data = as.data.frame(tmp),
+              p = 2,
+              q = 2,
+              remove = rmv)
+summary(r4)
+```
+
+:::
+
+
+
+## A Note: Granger Causality
+
+Granger Causality is when lags of $X$ predict future values of $Y$.
+
+. . .
+
+Granger Causality $\neq$ (`r colorize("Mixtape", "chocolate")`) Causality!
+
+- Term spread does not *cause* GDP to decrease.
+- Term spread *today* is correlated with future changes in GDP.
+    - It is more likely that investor sentiment about future GDP causes term spread to change.
+    - GDP `r colorize("causes", "chocolate")` Spread
+    - Spread "Granger causes" GDP
+
+## A Note: Granger Causality {visibility="uncounted" .smaller}
+
+```{r results='hold'}
+#| code-fold: show
+lmtest::grangertest(gdp_pc ~ spread, tmp, order = 1)
+lmtest::grangertest(gdp_pc ~ spread, tmp, order = 2)
+```
+
+## Forecasting with X
+
+```{r eval = FALSE}
+forecast(model,
+         x,
+         h = 1,
+         interval = FALSE,
+         level = 0.95)
+```
+
+- ```model```: a fitted ```ardlDlm``` object
+- ```x```: values for $X_{t+1}, ..., X_{t+h}$
+- ```h```: similar to ```n.ahead```
+
+## Forecasting with X {visibility="uncounted"}
+
+We are interested in forecasting GDP.  Let's write some of the equations we believe:
+
+$$\begin{align}\%\Delta \text{GDP}_t &= \alpha + \sum_{i = 1}^{2}\beta_i \%\Delta \text{GDP}_{t-i} + \gamma\text{S}_{t-2} + e_t \\ 
+S_t &\sim ARIMA(p,d, q)\end{align}$$
+
+. . .
+
+We can fit both of these using ```auto.arima``` and ```ardlDlm```.  We will forecast 2013 and 2014.
+
+## Forecasting with X {visibility="uncounted" .smaller}
+
+:::: {.columns}
+
+::: {.column width="40%"}
+Step 1: Generate a model for $\%\Delta \text{GDP}_t$.
+
+- Use ```ardlDlm()``` to fit estimate parameters.
+
+- The structure of the model is determined from previous results.
+:::
+
+::: {.column width="60%"}
+```{r}
+#| code-fold: true
+c_namez <- colnames(tmp)
+tmp <- ts.union(tmp, h = ifelse(time(tmp) >= 2013, 1, 0))
+colnames(tmp) <- c(c_namez, "h")
+lim <- tmp[,"h"] == 0
+
+rmv.q <- c() # y-vars
+rmv.p <- list(spread = c(0,1)) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+main <- ardlDlm(formula = gdp_pc ~ spread,
+              data = as.data.frame(tmp[lim,]),
+              p = 2,
+              q = 2,
+              remove = rmv)
+summary(main)
+```
+:::
+
+::::
+
+## Forecasting with X {visibility="uncounted" .smaller}
+
+:::: {.columns}
+
+::: {.column width="40%"}
+Step 2: Generate a model for $S_t$.
+
+- Use ```auto.arima()``` for simplicity.
+
+- Forecasts from this model will be used in future steps.
+:::
+
+::: {.column width="60%"}
+```{r}
+#| code-fold: true
+sub <- auto.arima(tmp[lim,"spread"])
+summary(sub)
+```
+:::
+
+::::
+
+## Forecasting with X {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+p <- predict(sub, n.ahead = 8)
+plot(tmp[,"spread"], lwd = 1,
+     ylim = c(-1, 4),
+     xlim = c(2000, 2015),
+     xlab = "Quarter", ylab = "Percentage Points",
+     main = "Term Spread (10Y - 3M)")
+lines(seq(2013, 2014.75, by = 1/4),
+      tmp[!lim,"spread"], col = "dodgerblue", lwd = 3)
+lines(seq(2013, 2014.75, by = 1/4),
+      p$pred, col = "tomato", lwd = 3)
+legend("bottomright", bty = "n", lty = 1,
+       col = c("tomato", "dodgerblue"),
+       legend = c("Forecast", "Actual"))
+```
+
+## Forecasting with X {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+r1 <- auto.arima(tmp[lim,"gdp_pc"])
+p1 <- predict(r1, n.ahead = 8)
+
+forecast(model = main,
+         x = p$pred,
+         h = 8,
+         interval = FALSE) -> f
+plot(tmp[,"gdp_pc"],
+     ylim = c(-2, 3),
+     xlim = c(2000, 2015),
+     xlab = "Quarter", ylab = "Percentage Points",
+     main = "Percent Change in GDP")
+lines(seq(2013, 2014.75, by = 1/4),
+      tmp[!lim,"gdp_pc"], col = "dodgerblue", lwd = 3)
+lines(seq(2013, 2014.75, by = 1/4),
+      f$forecasts, col = "tomato", lwd = 3)
+lines(seq(2013, 2014.75, by = 1/4), lwd = 3,
+      as.numeric(p1$pred), col = "mediumseagreen")
+legend("bottomright", bty = "n", lty = 1,
+       col = c("tomato", "mediumseagreen", "dodgerblue"),
+       legend = c("ARDL Forecast", "ARIMA Forecast" , "Actual"))
+```
+
+## Forecasting with X {visibility="uncounted"}
+
+```{r}
+#| code-fold: show
+c_namez <- colnames(tmp)
+tmp <- ts.intersect(tmp, spread_l2 = lag(tmp[,"spread"], -2))
+colnames(tmp) <- c(c_namez, "spread_l2")
+
+r1 <- auto.arima(tmp[,"gdp_pc"])
+r2 <- auto.arima(tmp[,"gdp_pc"], xreg = tmp[,"spread_l2"])
+```
+
+## Forecasting with X {visibility="uncounted" .smaller}
+
+:::: {.columns}
+
+::: {.column width="50%"}
+```{r}
+#| code-fold: true
+r1
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+#| code-fold: true
+r2
+```
+:::
+
+::::
+
+# Cointegration
+
+## Cointegration {visibility="uncounted"}
+
+<table border="0" width="100%">
+  <tbody><tr>
+    <td width="50%"><p align="center"><img src="https://www.eco.uc3m.es/~jgonzalo/teaching/econometriaii/archivos_cointegration/oldladyRandomWalk.gif" alt="oldladyRandomWalk.gif (14623 bytes)" width="40" height="110">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </p></td>
+    <td width="50%"><p align="center"><img src="https://www.eco.uc3m.es/~jgonzalo/teaching/econometriaii/archivos_cointegration/boy_randomWalk.gif" alt="boy_randomWalk.gif (976 bytes)" width="47" height="85"></p></td>
+  </tr>
+  <tr>
+    <td width="100%" colspan="2"><p align="center"><img src="https://www.eco.uc3m.es/~jgonzalo/teaching/econometriaii/archivos_cointegration/oldman_dog.gif" width="168" height="128" alt="oldman_dog.gif (11472 bytes)"></p></td>
+  </tr>
+</tbody></table>
+
+::: aside
+eco.uc3m.es/~jgonzalo/teaching/econometriaii/cointegration.htm
+:::
+
+## Cointegration {visibility="uncounted"}
+
+Suppose we want to model consumption as a function of income.  If we assume consumption is some *constant* fraction of your income (according to economic theory), we could write the following model:
+
+$$C_t = kI_t$$
+
+. . .
+
+We can rewrite this as:
+
+$$ \begin{align}log(C_t) &= log(kY_t) \\ &= log(k) + log(Y_t)\end{align}$$
+
+
+## Cointegration {visibility="uncounted"}
+
+We can also say that:
+
+$$\begin{align} \Delta log(C_t) &= log(C_t) - log(C_{t-1})\\ &= log(k) + log(Y_t) - (log(k) + log(Y_{t-1})) \\
+&= log(k)-log(k) + log(Y_t) - log(Y_{t-1}) \\
+&= \Delta log(Y_{t})\end{align}$$
+
+## Cointegration {visibility="uncounted" auto-animate=true}
+
+Let's suppose we estimated the following model (in logs):
+
+$$C_t = \beta_0 + \beta_1 Y_t + \beta_2 Y_{t-1} + \alpha C_{t-1}$$
+
+. . .
+
+In the long run, we should find an equilibrium $C^*$ and $Y^*$:
+
+. . .
+
+$$C^* = \beta_0 + \beta_1 Y^* + \beta_2 Y^* + \alpha C^*$$
+
+. . .
+
+Simplifying:
+
+$$(1-\alpha)C^* = \beta_0 + (\beta_1 + \beta_2) Y^*$$
+
+## Cointegration {visibility="uncounted" auto-animate=true}
+
+$$(1-\alpha)C^* = \beta_0 + (\beta_1 + \beta_2) Y^*$$
+
+Since $\Delta log(C_t) = \Delta log(Y_t)$, then $1-\alpha = \beta_1 + \beta_2$.
+
+. . .
+
+Let $\gamma = 1-\alpha = \beta_1 + \beta_2$.
+
+. . .
+
+$$\begin{align}\alpha &= 1 - \gamma \\ \beta_2 &= \gamma - \beta_1\end{align}$$
+
+## Cointegration {visibility="uncounted" .smaller}
+
+$$C_t = \beta_0 + \beta_1 Y_t + \color{red}{\beta_2} Y_{t-1} + \color{red}{\alpha} C_{t-1}$$
+
+. . .
+
+$$ C_t = \beta_0 + \beta_1 Y_t + (\gamma - \beta_1) Y_{t-1} + (1-\gamma) C_{t-1} $$
+
+. . .
+
+$$C_t - C_{t-1} = \beta_0 + \beta_1 Y_t - \beta_1 Y_{t-1} + \gamma Y_{t-1} - \gamma C_{t-1}$$
+
+. . .
+
+$$C_t - C_{t-1} = \beta_0 + \beta_1 (Y_t - Y_{t-1}) + \gamma (Y_{t-1} - C_{t-1})$$
+
+. . .
+
+$$\Delta C_t = f(\Delta Y_t, Y_{t-1} - C_{t-1})$$
+
+Where:
+
+- $\Delta Y_t$ is the short run relationship
+- $Y_{t-1} - C_{t-1}$ is the long run equilibrium
+
+## Cointegration {visibility="uncounted"}
+
+Idea: Two or more non-stationary processes may be linked through an equilibrium.
+
+. . .
+
+Consumption & Income
+
+- Overspending: liquidity constraint
+- Underspending: not optimizing
+- **Utility Maximization**
+
+## Cointegration {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+
+pi <- read.csv("../data/inc_pce.csv")
+pi$DATE <- ymd(pi$DATE)
+par(mfrow = c(1, 2))
+plot(pi$DATE, pi$PI, type = "l",
+     ylim = range(pi$PI, pi$PCE),
+     xlab = "Date", ylab = "log($)",
+     col = "tomato")
+lines(pi$DATE, pi$PCE, type = "l", col = "dodgerblue")
+legend("topleft", legend = c("PI", "PCE"),
+       col = c("tomato", "dodgerblue"),
+       lty = 1, bty = "n")
+
+plot(pi$DATE, log(pi$PI), type = "l",
+     ylim = log(range(pi$PI, pi$PCE)),
+     xlab = "Date", ylab = "log($)",
+     col = "tomato")
+lines(pi$DATE, log(pi$PCE), type = "l", col = "dodgerblue")
+legend("topleft", legend = c("PI", "PCE"),
+       col = c("tomato", "dodgerblue"),
+       lty = 1, bty = "n")
+```
+
+## Cointegration {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+reg <- lm(log(PCE) ~ log(PI), data = pi)
+summary(reg)
+```
+
+## Cointegration {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(pi$DATE,
+     reg$residuals,
+     xlab = "Time", ylab = "",
+     main = expression(paste("Residuals from: log(PCE"[t], ") = ", alpha, " + ", beta, "log(PI"[t], ")")),
+     type = "l")
+```
+
+## Cointegration {visibility="uncounted" .smaller}
+
+:::: {.columns}
+
+::: {.column width="40%"}
+Since the residuals are *not* $I(0)$, consumption and income are not cointegrated.
+:::
+
+::: {.column width="60%"}
+```{r}
+#| code-fold: true
+tseries::adf.test(reg$residuals)
+```
+:::
+
+::::
+
+## Cointegration {visibility="uncounted"}
+
+Error Correction Model: the change of one series is explained in terms of:
+
+- the lag of the difference between the series
+- lags of the differences of each series
+
+. . .
+
+$$\begin{align}\Delta y_t &= \Sigma_{i = 1}^{p} \alpha_{i} \Delta y_{t-i} \\ &+ \Sigma_{j = 1}^{q} \beta_{j} \Delta x_{t-j} \\ &+ \gamma z_{t-1} + \mu + e_t\end{align}$$
+
+## Cointegration {visibility="uncounted"}
+
+Suppose income and consumption were in fact cointegrated.  How would we estimate the model?
+
+```{r}
+#| code-fold: show
+pi_ts <- ts(pi, start = c(1959, 1), frequency = 12)
+pi_ts <- ts.intersect(pi_ts,
+                      pc = diff(log(pi_ts[,"PCE"])),
+                      pi = diff(log(pi_ts[,"PI"])))
+colnames(pi_ts) <- c("DATE", "PI", "PCE", "pc", "pi")
+
+pi_ts <- ts.union(pi_ts, reg$residuals[2:length(reg$residuals)])
+colnames(pi_ts) <- c("DATE", "PI", "PCE", "pc", "pi", "z")
+```
+
+## Cointegration {visibility="uncounted" .smaller}
+
+::: {.panel-tabset}
+
+### ACF
+
+```{r}
+#| code-fold: true
+acf(pi_ts[,c("pc", "pi")])
+```
+
+### PACF
+
+```{r}
+#| code-fold: true
+pacf(pi_ts[,c("pc", "pi")])
+```
+:::
+
+## Cointegration {visibility="uncounted" .smaller}
+
+```{r}
+#| code-fold: true
+# pi_ts <- ts.union(pi_ts, reg$residuals[2:length(reg$residuals)])
+# colnames(pi_ts) <- c("DATE", "PI", "PCE", "pc", "pi", "z")
+
+rmv.q <- c() # y-vars
+rmv.p <- list(pi = c(), z = c(0, 2:12)) # x-vars
+rmv <- list(p = rmv.p, q = rmv.q)
+main <- ardlDlm(formula = pc ~ pi + z,
+              data = as.data.frame(pi_ts),
+              p = 12,
+              q = 12,
+              remove = rmv)
+summary(main)
+```
+
+## Cointegration {visibility="uncounted" .smaller}
+
+What does a negative coefficient mean?
+
+. . .
+
+The residual is positive when $\text{consumption} > \alpha + \beta \times\text{income}$.  Remember, these two things are $\approx$ when in equilibrium.
+
+. . .
+
+In other words, if last period's consumption is greater than the equilibrium amount, this period's change in consumption will be less -- snapping the relationship back towards equilibrium.
+
+# HW 5: Forecasting AIDS
+
+## AIDS {visibility="uncounted"}
+
+Forecast the next 2 years of AIDS deaths (1994Q2 - 1996Q1).
+
+```{r}
+#| code-fold: true
+
+# Forecast 
+
+tmp3 <- readRDS("../data/aids.RDS")
+
+tmp <- aggregate(list(death = tmp3$deaths,
+                      diag = tmp3$diag),
+                 list(month = tmp3$month),
+                 sum, na.rm = TRUE)
+ifelse(tmp$death == 0, NA, tmp$death) -> tmp$death
+ifelse(tmp$diag == 0, NA, tmp$diag) -> tmp$diag
+tmp <- tmp[year(tmp$month) >= 1987,]
+
+lim1 <- tmp$month <= ymd("1994-04-01") & !is.na(tmp$death)
+
+plot_all <- function(months = 0){
+  
+  plot(tmp$month, tmp$diag, type = "n",
+       xlab = "Month", ylab = "Quantity")
+  lines(tmp$month[lim1], tmp$diag[lim1], type = "l", col = "black", lwd = 3)
+  lines(tmp$month[lim1] - months(months), tmp$death[lim1], col = "dodgerblue", lwd = 3)
+  abline(v = ymd(c("1993-01-01", "1994-04-15")), lty = c(1, 2))
+  legend("topright", bty = "n", col = c("black", "dodgerblue"), lty = 1,
+         legend = c("Diagnoses", "Deaths"), lwd = 2)
+}
+
+plot_all()
+```
+
+## AIDS {visibility="uncounted"}
+
+HW: Use diagnoses to improve on this ARIMA model:
+
+```{r eval=FALSE}
+#| code-fold: true
+
+# Forecast AIDS deaths from 1994-04-01 through 1996-03-01.
+
+library("lubridate")
+library("tseries")
+library("forecast")
+rm(list = ls())
+# setwd(paste0("C:/Users/",Sys.info()["users"],"/Dropbox/teaching/Fall 2022/econ707/data"))
+tmp3 <- readRDS("../data/aids.RDS")
+
+tmp <- aggregate(list(death = tmp3$deaths,
+                      diag = tmp3$diag),
+                 list(month = tmp3$month),
+                 sum, na.rm = TRUE)
+ifelse(tmp$death == 0, NA, tmp$death) -> tmp$death
+ifelse(tmp$diag == 0, NA, tmp$diag) -> tmp$diag
+tmp <- tmp[year(tmp$month) >= 1987,]
+
+lim1 <- tmp$month <= ymd("1994-04-01") & !is.na(tmp$death)
+
+plot_all <- function(months = 0){
+  
+  plot(tmp$month, tmp$diag, type = "n",
+       xlab = "Month", ylab = "Quantity")
+  lines(tmp$month[lim1], tmp$diag[lim1], type = "l", col = "black", lwd = 3)
+  lines(tmp$month[lim1] - months(months), tmp$death[lim1], col = "dodgerblue", lwd = 3)
+  abline(v = ymd(c("1993-01-01", "1994-04-15")), lty = c(1, 2))
+  legend("topright", bty = "n", col = c("black", "dodgerblue"), lty = 1,
+         legend = c("Diagnoses", "Deaths"), lwd = 2)
+}
+
+plot_all()
+
+## ARIMA
+
+aids_ts <- ts(tmp[lim1,2:3], start = c(min(year(tmp$month[lim1]))), frequency = 12)
+
+adf.test(diff(aids_ts[,"death"]))
+acf(diff(aids_ts[,"death"]))
+pacf(diff(aids_ts[,"death"]))
+
+adf.test(diff(diff(aids_ts[,"death"], lag = 12)))
+acf(diff(diff(aids_ts[,"death"], lag = 12)))
+pacf(diff(diff(aids_ts[,"death"], lag = 12)))
+
+reg1 <- auto.arima(aids_ts[,"death"])
+H <- 24
+p1 <- predict(reg1, n.ahead = H)
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      p1$pred, col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H], col = "mediumseagreen", lwd = 3)
+legend("bottomright", bty = "n", col = c("tomato", "mediumseagreen"), lty = 1,
+       legend = c("ARIMA", "Actual"), lwd = 2)
+```
+
+```{r echo=FALSE}
+aids_ts <- ts(tmp[lim1,2:3], start = c(min(year(tmp$month[lim1]))), frequency = 12)
+reg1 <- auto.arima(aids_ts[,"death"])
+H <- 24
+p1 <- predict(reg1, n.ahead = H)
+plot_all()
+lines(tmp$month[!lim1][1:H],
+      p1$pred, col = "tomato", lwd = 3)
+lines(tmp$month[!lim1][1:H],
+      tmp$death[!lim1][1:H], col = "mediumseagreen", lwd = 3)
+legend("bottomright", bty = "n", col = c("tomato", "mediumseagreen"), lty = 1,
+       legend = c("ARIMA", "Actual"), lwd = 2)
+```
+
+## Next Classes
+::: {.nonincremental}
+
+:::: {.columns}
+
+::: {.column width="40%"}
+**11/16**:
+
+- VAR
+- Coefficient Dynamics
+
+**11/23**:
+
+- No Class
+:::
+
+::: {.column width="50%"}
+**11/30**:
+
+- Spatial Autocorrelation
+- Project Help
+
+**12/7**:
+
+- Final Presentations
+:::
+
+::::
+
+:::
+
+
+
+<!-- https://www.econometrics-with-r.org/14-5-apatadlm.html -->
+<!-- https://people.duke.edu/~rnau/411home.htm -->
+<!-- https://fred.stlouisfed.org/series/MSPUS#0 -->
+
+

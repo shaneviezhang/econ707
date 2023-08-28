@@ -1,0 +1,458 @@
+---
+title: "ECON 707/807: Econometrics II"
+subtitle: "Course Introduction"
+author: "Evie Zhang"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    #chalkboard: true
+    
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: https://www.odu.edu/content/dam/odu/logos/univ/png-72dpi/odu-secondarytm-blu.png
+    footer: "ECON 707/807: Econometrics II"
+  
+self-contained: true
+  
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+```
+
+## Time Series
+
+. . .
+
+Sequential measurements or values of a single entity over time.
+
+. . .
+
+Why study time series data?
+
+-   Gross Domestic Product
+-   Unemployment
+-   Vehicle Demand
+-   Energy Consumption
+
+## Forecasting
+
+. . .
+
+"Predict" outcomes of a time series in future (unobserved) periods.
+
+```{r echo = FALSE}
+#| output-location: fragment
+library(pacman)
+p_load(tidyverse, tidyverse, data.table, ggplot2, lubridate)
+
+urate <- read.csv("../data/unrate_us.csv") 
+
+# Rename columns
+urate <- urate %>%
+  rename(date = DATE, urate_t = UNRATE) %>%
+  mutate(date = ymd(date))
+
+# Plot using ggplot2
+urate %>%
+  ggplot(aes(x = date, y = urate_t)) +
+  geom_line(color = "dodgerblue")  +
+  labs(
+    title = "Monthly Unemployment Rate",
+    x = "Time",
+    y = "Unemployment Rate"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Time Series Models {.smaller}
+
+$$Y_{t} = f(Y_{t-1}, X_{t}, X_{t-1}, \tau_t, C_t, S_t)$$ where:
+
+::: nonincremental
+-   $Y_{t-1}$ is a lagged value of $Y$
+-   $X_t$ is a contemporaneous independent value
+-   $X_{t-1}$ is a lagged value of $X$
+-   $\tau$ is the trend
+-   $C$ is the cycle
+-   $S$ is the season
+:::
+
+::: aside
+Note: this model only considers what is *inside* the model!
+:::
+
+## Statistics Review
+
+-   mean
+-   variance
+-   standard error
+-   central limit theorem (CLT)
+-   p-value
+-   $Y_i = \alpha + \beta X_i + \epsilon_{i}$
+-   causality
+-   [spurious](https://www.tylervigen.com/spurious-correlations)
+
+## Forecasting Steps
+
+1.  Define Problem
+
+    What am I trying to solve?
+
+2.  Gather Data
+
+    FRED, WRDS, Etc.
+
+3.  Exploratory Data Analysis (EDA)
+
+    Plot, Plot, Plot
+
+4.  Choose & Fit a Model
+
+    $Y_{t} = f(Y_{t-1}, X_{t}, X_{t-1}, \tau_t, C_t, S_t)$
+
+5.  Evaluate, Forecast
+
+## Packages and Functions
+
+-   `dplyr`
+-   `tidyverse`
+-   `ggplot2`
+-   `group_by(), summarise(), left_join()`
+-   `paste()`, `paste0()`, `substr()`, `grepl()`, `gsub()`, `regexpr()`, `strsplit()`, `unlist()`
+
+
+
+## Packages and Functions {visibility="uncounted"}
+
+-   `for()`
+-   `if()`, `else`
+-   `ifelse()`
+-   `fixest`
+-   `scales::alpha()`
+-   `data.table::fread()`
+-   `readRDS()`, `saveRDS()`
+
+## Packages and Functions {visibility="uncounted"}
+
+-   `lubridate`[^1]
+-   `tsibble`
+-   `forecast`
+-   `ts()`[^2]
+-   `duplicated()`
+
+[^1]: [lubridate](https://evoldyn.gitlab.io/evomics-2018/ref-sheets/R_lubridate.pdf)
+
+[^2]: [ts](https://www.statmethods.net/advstats/timeseries.html)
+
+## Install and Load Packages
+
+```{r eval = FALSE}
+install.packages("lubridate")
+library("lubridate")
+```
+
+## Make a Time Series
+
+```{r}
+#| output-location: fragment
+urate <- read.csv("../data/unrate_us.csv")
+colnames(urate) <- c("date", "urate_t")
+head(urate)
+```
+
+## Plot a Time Series
+
+```{r}
+#| output-location: fragment
+urate <- urate %>%
+  mutate(date = ymd(date))
+
+urate %>%
+  ggplot(aes(x = date, y = urate_t)) +
+  geom_point() +
+  labs(
+    title = "Monthly Unemployment Rate",
+    x = "Month",
+    y = "Unemployment Rate"
+  ) +
+  theme_minimal() +  # Simpler background theme with x and y axis
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Plot a Time Series {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+ggplot(urate, aes(x = date, y = urate_t)) +
+  geom_line(color = "dodgerblue") +
+  labs(
+    title = "Monthly Unemployment Rate",
+    x = "Time",
+    y = "Unemployment Rate"
+  )  + 
+  theme_minimal() +  # Simpler background theme with x and y axis
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Lags (Leads)
+
+```{r echo=FALSE}
+head(urate)
+```
+
+. . .
+
+```{r echo = TRUE}
+#| code-fold: true
+library(tidyverse)
+
+urate <- urate %>%
+  mutate(
+    urate_tm1 = lag(urate_t, order_by = date),
+    urate_tp1 = lead(urate_t, order_by = date)
+  )
+
+head(urate)
+```
+
+## What about panels?
+
+```{r}
+#| code-fold: true
+library(tidyverse)
+
+df <- tibble(
+  state = c(rep("NY", 10),
+            rep("VA", 10),
+            rep("CA", 10)),
+  year = rep(2010:2019, 3),
+  var = rnorm(30)
+)
+
+df %>%
+  filter(year %in% 2010:2012)
+```
+
+## What about panels? {visibility="uncounted"}
+
+
+```{r echo = FALSE}
+#| output-location: fragment
+df <- df %>%
+  group_by(state) %>%
+  mutate(var_lag1 = lag(var, n = 1, default = NA)) %>%
+  ungroup()
+```
+
+::: aside
+Note: these data are already ordered.
+:::
+
+## What about panels? {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+#| output-location: fragment
+df <- df %>%
+  group_by(state) %>%
+  mutate(var_lag1 = lag(var, n = 1, default = NA)) %>%
+  ungroup()
+
+df %>%
+  filter(year %in% 2010:2012)
+```
+
+## Multiple Plots
+
+```{r}
+#| output-location: fragment
+ggplot(df, aes(x = as.factor(year), y = var)) +
+  geom_point()  + 
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var Value"  # Modified y-axis label
+  ) +
+  theme_minimal() +  # Simpler background theme with x and y axis
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Multiple Plots {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+library(ggplot2)
+
+ggplot(df, aes(x = as.factor(year), y = var, group = state, color = state)) +
+  geom_point() +
+  scale_color_brewer(name = "State", palette = "Set1") + # Different set of colors
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var Value"  # Modified y-axis label
+  ) +
+  theme_minimal() +  # Simpler background theme with x and y axis
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Multiple Plots {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+ggplot(df, aes(x = as.factor(year), y = var, group = state, color = state)) +
+  geom_line() +
+  scale_color_manual(name = "State", values = c("NY" = "#FF9999", "VA" = "#99CCFF", "CA" = "#99FF99")) +  # Pastel color scheme
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var"
+  ) +
+  theme_minimal() +  # Simpler background theme with x and y axis
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Multiple Plots {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+df %>%
+  filter(state == "NY") %>%
+  ggplot(aes(x = as.factor(year), y = var, color = state)) +
+  geom_line(group = 1) +
+  scale_color_manual(values = c("NY" = "#FF9999")) + # Soft pink color for NY
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Multiple Plots {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+df %>%
+  ggplot(aes(x = as.factor(year), y = var, color = state, group = state)) +
+  geom_line() +
+  scale_color_brewer(palette = "Pastel1") + # Using the "Pastel1" palette for milder colors
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 0, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Multiple Plots {visibility="uncounted"}
+
+```{r}
+#| output-location: fragment
+df %>%
+  ggplot(aes(x = as.factor(year), y = var, color = state)) +
+  geom_line(group = 1) +
+  scale_color_brewer(palette = "Pastel1") + # Using the "Pastel1" palette for milder colors
+  labs(
+    title = "",
+    x = "Year",
+    y = "Var"
+  ) +
+  facet_wrap(~ state, scales = "free_y") + # Separate graphs based on state
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Centering title
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y = element_text(color = "black")
+  )
+```
+
+## Next Class
+
+1.  $E[y]$, $\hat{y}$
+2.  Loss Functions
+3.  Lags, Leads
+4.  Conditional Forecasts
+5.  Time Series Components
+
+## Practice - Cleaning Data
+
+::: nonincremental
+1. Work on [\#5](https://foresightbi.com.ng/microsoft-power-bi/dirty-data-samples-to-practice-on/#5_Jumbled_Customer_Details).
+
+2. Work on [\#8](https://foresightbi.com.ng/microsoft-power-bi/dirty-data-samples-to-practice-on/#8_Invoices_With_Merged_Categories_and_Merged_Amounts).
+:::
+
+## Practice - Social Security
+
+::: nonincremental
+1. Navigate to the following link: [here]("https://www.ssa.gov/oact/babynames/limits.html")
+2. Download the state-specific data.
+3. Read in the data from Virginia.
+    - Make some plots for a name of your choosing (time series, distributions, etc.)
+4. Read in *all* of the data
+    - Combine into one data.frame.
+    - What state is your chosen name "most" popular?
+    - What year is your chosen name "most" popular?
+    - Analyze the "gender neutrality" of a relatively unisex name (e.g. "Alex").
+    - Analyze a common name and it's nickname (e.g. "Alex" vs "Alexander").
+:::
+
+
+
+
+
+
+
+
+

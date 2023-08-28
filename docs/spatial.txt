@@ -1,0 +1,75 @@
+sf package
+
+
+
+https://www.youtube.com/watch?v=b3HtV2Mhmvk&list=PLlnEW8MeJ4z6Du_cbY6o08KsU6hNDkt4k&index=12
+
+
+
+
+Modifiable Areal Unit Problem (MAUP): scale, zonal, gerymandering/redistricting - https://gisgeography.com/maup-modifiable-areal-unit-problem/
+- Effect of some policy on crime: luminosity on crime
+	Crime Counts: within an area (corner, block, neighborhood (?), county, state)
+	Whether a crime happens: need interactions
+	Use CI (and counterfactuals) to inform this
+- Effect of pavement smoothness on crash rates
+	How should we design a study?
+	mile level? between exits? routes? route-by-county? grid?
+- Generate random points and polygons
+	multiple geometries
+
+Tobler's First Law of Geography:
+"everything is related to everything else, but near things are more related than distant things."
+	- disease spread
+	- pollution
+	- legal marijuana
+
+Autocorrelation: correlation between "nearby" observations
+
+This leads to:
+	- OLS
+		- crime here is caused by unemployment here
+	- spatial lag in x
+		- crime here is impacted by unemployment here and there
+		- not necessarily a spatial model
+	- spatial error (error terms are related)
+		Y_i = X_i \beta + e_i + \lambda w_i e
+		"... the only way that observations are interdependent is through unmeasured variables that are correlated, in this case across space." - Space Is More than Geography: Using Spatial Econometrics in the Study of Political Economy
+		"the error of an observation affects the errors of its neighbors" - https://blogs.iq.harvard.edu/spatial_error_1
+		there is some unobserved factor across space impacting
+	- spatial lag (observations are spatially dependent)
+		Y_i = X_i \beta + \lambda w_i y + e_i
+		- should be thought of as spillovers
+			- a higher income in one county increases income in another
+		"... differs from the spatially lagged error model, in that both the error term and the covariates in nearby units impact the current unit"
+		"... let the dependent variable be the level of democracy in a country. It is likely that this is partly a function of democracy in nearby countries, rather than just being related to common unmeasured variables in nearby countries."
+		WHAT ARE COMMON UNMEASURED VARIABLES IN NEARBY COUNTRIES?
+		ex: (n) -- 
+		ex: (y) -- 
+		This can also be thought on in a non-spatial sense.
+			What about Twitter, Facebook, Snapchat?  These are "closer" than J&J, Eli Lilly, Pfizer.
+	- spatial heterogeneity (model params vary over space)
+		ex: (n) -- 
+		ex: (y) -- 
+
+We need a weights matrix!
+	- create connections
+	- rook vs queen vs k-nearest vs decaying
+
+Moran's I (-1 to 1)
+- build formula ...
+1) Compute mean: \bar{X}
+2) Compute variation: \sum_{i = 1}^{N} (X_i - \bar{X})^2
+3) Compute weighted variation... variation between units weighted by "closeness"/"nearness"
+	- for each i, for each j, calculate (X_i - \bar{X})(X_j - \bar{X}) ... similar to correlation
+	- weight this by w! w(X_i - \bar{X})(X_j - \bar{X})
+4) Step 3 / Step 2
+	Don't usually have negative, so often testing if I > some critical value
+
+Models:
+- lag
+- error
+
+
+
+

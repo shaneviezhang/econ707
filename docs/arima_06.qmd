@@ -1,0 +1,553 @@
+---
+title: "ARMA / ARIMA"
+subtitle: "Week 6"
+author: "Alex Cardazzi"
+institute: "Old Dominion University"
+format:
+  revealjs:
+    #chalkboard: true
+
+    echo: true
+    code-fold: show
+    code-summary: "Code"
+    code-tools: true
+    code-copy: hover
+    link-external-newwindow: true
+    tbl-cap-location: top
+    fig-cap-location: bottom
+    #smaller: true
+    
+    scrollable: true
+    incremental: true 
+    slide-number: c/t
+    show-slide-number: all
+    menu: false
+    
+    logo: https://www.odu.edu/content/dam/odu/logos/univ/png-72dpi/odu-secondarytm-blu.png
+    footer: "ECON 707/807: Econometrics II"
+  
+self-contained: true
+  
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(out.width = '90%')
+par(mar = c(4.1, 4.1, 1.1, 4.1))
+set.seed(123)
+library("stargazer")
+library("lubridate")
+library("forecast")
+```
+
+##  Exam 1
+
+Estimating Models (intercept, trend, kink, ar, ma)
+
+Visualization
+
+Interpretation / Inference
+
+## Topics
+
+- Stationarity
+- Autocorrelation
+- Moving Averages
+- ARMA, ARIMA
+- ARCH, GARCH
+
+<!-- https://otexts.com/fpp3/arima.html -->
+<!-- https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html#arima-models -->
+<!-- https://talksonmarkets.files.wordpress.com/2012/09/time-series-analysis-with-arima-e28093-arch013.pdf -->
+<!-- https://palomar.home.ece.ust.hk/MAFS6010R_lectures/Rsession_time_series_modeling.html -->
+
+## Data Generating Process
+
+$$Y = f(X, \epsilon)$$
+
+If we want to model some **Data Generating Process** (DGP), we need the data we use to train/estimate the model to "represent" the data in the future.  We need to *know* that something in the future will be similar to how it was in the past.
+
+- Therefore, we need the DGP to be independent of time (**stationarity**)
+- DGPs with trends or seasonal components are not stationary.
+
+## Diagnosing (Non-)Stationarity
+
+To test for stationarity, we have a few options.
+
+- Visual Inspection
+
+- ACF, PACF
+
+- Unit Root test (augmented Dickey-Fuller, KPSS, etc.)
+
+## {visibility="uncounted" background-image="https://otexts.com/fpp3/fpp_files/figure-html/stationary-1.png" background-size="contain"}
+
+## Diagnosing Stationarity
+
+**ACF, PACF**
+    
+- ACF: Correlation between $Y_t$ and $Y_{t-i}$
+    - Hardly decaying correlations in the ACF signal a non-stationary process.
+    - "Seasonal patterns" signal a non-stationary process.
+- PACF: Correlation between $Y_t$ and $Y_{t-i}$ after controlling for $Y_{t-1}, \ ... \ Y_{t-i+1}$
+- There is a degree of "artistry" that comes with reading ACF, PACF plots.
+
+## Diagnosing Stationarity
+
+**Unit Root test** (augmented Dickey-Fuller)
+
+- $Y_{t} = \beta Y_{t-1} + e_t$
+
+- $Y_{t} - Y_{t-1} = \beta Y_{t-1} + e_t - Y_{t-1}$
+
+- $\Delta Y_{t} = (\beta-1)Y_{t-1} + e_t$
+
+- Test if $(\beta - 1)$ is different from $0$.
+
+. . .
+
+$(\beta - 1) \neq 0 \implies \beta \neq 1 \implies$ no unit root (*i.e. stationarity*)
+
+## Achieving Stationarity
+
+Okay, our time series is non-stationary.  What now?
+
+- Difference $Y_t$ and $Y_{t-1}$. Most times, a single difference is fine.  However, sometimes we need $p$ differences.  This is interpreted as *changes* in the outcome variable, instead of levels.
+- Take the log of a variable.
+
+## Achieving Stationarity
+
+```{r echo = F}
+plot(0:10, rep(0, 11), type = "n",
+     xaxt = "n", yaxt = "n", bty = "n",
+     xlab = "", ylab = "", ylim = c(-.3, 1))
+segments(x0 = 0, x1 = 7, y0 = 0, lwd = 2, col = "dodgerblue")
+arrows(x0 = 7, x1 = 10, y0 = 0, length = .2, lwd = 2, col = "tomato")
+points(7, 0, pch = "|")
+text("Training", x = 3.5, y = -.2, cex = 1.4)
+text("Testing", x = 8.5, y = -.2, cex = 1.4)
+axis(1, c(0, 7, 10), c("t = 0", "t = T", "t = T + h"), lwd = 0, lwd.ticks = 1, cex.axis=1.4)
+lines((1:(49*2))/(7*2), rnorm(49*2, .6, .2))
+lines(((49*2):((70*2) - 1))/(7*2), rnorm(21*2, .6, .2), col = "mediumseagreen")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+data("AirPassengers")
+air <- AirPassengers
+plot(air, ylab = "Passengers")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+#| warning: false
+acf(air, lag.max = 36)
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+#| warning: false
+tseries::adf.test(air)
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(log(air), ylab = "log(Passengers)")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(diff(log(air)), ylab = expression(paste(Delta, " log(Passengers)")))
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+#| warning: false
+acf(diff(log(air)), lag.max = 36)
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+#| warning: false
+tseries::adf.test(diff(log(air)))
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+We are still having trouble achieving stationarity with this time series due to its seasonal compenent.  If this were (magically / mathematically) removed, we seem to have a constant variance and mean, though.
+
+. . .
+
+Let's try another time series: Monthly Liquor Sales from FRED.
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+liquor <- read.csv("../data/liquor.csv")
+liquor$date <- mdy(liquor$date)
+liquor <- liquor[liquor$date < ymd("2020-01-01"),]
+plot(liquor$date, liquor$sales, type = "l",
+     xlab = "Month", ylab = "Sales in Millions")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(liquor$date[2:nrow(liquor)],
+     diff(liquor$sales), type = "l",
+     xlab = "Month", ylab = "Difference")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(liquor$date, liquor$sales_adj, type = "l",
+     xlab = "Month", ylab = "Sales in Millions")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(liquor$date[2:nrow(liquor)],
+     diff(liquor$sales_adj), type = "l",
+     xlab = "Month", ylab = "Difference")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(liquor$date, asinh(liquor$sales_adj), type = "l",
+     xlab = "Month", ylab = "log(Sales in Millions)")
+```
+
+## Achieving Stationarity {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+plot(liquor$date[2:nrow(liquor)],
+     diff(asinh(liquor$sales_adj)), type = "l",
+     xlab = "Month", ylab = "Difference of Log")
+```
+
+## Diagnosing Stationarity {visibility="uncounted"}
+
+Log Seasonally Adjusted Sales Data (Difference)
+
+```{r}
+#| code-fold: true
+par(mfrow = c(1, 2))
+acf(diff(asinh(liquor$sales_adj)), xlim = c(1, 25), main = "log(Adjusted Sales)")
+pacf(diff(asinh(liquor$sales_adj)), xlim = c(1, 25), main = "log(Adjusted Sales)")
+```
+
+## $\text{log}()\text{;} \ \text{sinh}^{-1}()$
+
+$Y = \alpha + \beta X + e$
+
+- a one unit change in X causes a $\beta$ unit change in Y.
+
+$Y = \alpha + \beta \text{log}(X) + e$
+
+- a one percent change in X causes a $\beta$ unit change in Y.
+
+$\text{log}(Y) = \alpha + \beta X + e$
+
+- a one unit change in X causes a $100*\beta$ percent change in Y.
+
+$\text{log}(Y) = \alpha + \beta \text{log}(X) + e$
+
+- a one percent change in X causes a $100*\beta$ percent change in Y.
+
+## Example Autoregressive (AR) Model
+
+We want to forecast liquor sales.  However, this time series in levels is non-stationary.  Instead, we'll estimate growth rates in liquor sales and then transform back into sales.  Throughout the process, visualize your transformation and test if it is stationary.
+
+- Step 1: Log the time series to think about percentages.
+- Step 2: Take the first difference to think about changes.
+- Step 3: Look at the ACF/PACF to identify lag structure.
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+$$
+\begin{align}
+log(Y_{t}) - log(Y_{t-1}) &= \Delta log(Y_{t}) \\ &= \alpha + \beta \Delta log(Y_{t-1}) + \epsilon_t
+\end{align}
+$$
+
+If $Y_{t-1}$ increased by 1% from $Y_{t-2}$, we can expect an $100*\beta$ % change from $Y_{t-1}$ to $Y_{t}$.
+
+::: aside
+[Resource for Interpreting Logs](https://sites.google.com/site/curtiskephart/ta/econ113/interpreting-beta)
+:::
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+To be clear, let's fit and interpret a trend model.
+
+```{r}
+#| code-fold: true
+liquor$t <- interval(min(liquor$date), liquor$date) %/% months(1)
+summary(reg_liq <- lm(log(sales_adj) ~ t, data = liquor))
+```
+
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+Plot the model's fitted values.
+
+```{r}
+#| code-fold: true
+plot(liquor$date, log(liquor$sales_adj), type = "l",
+     ylab = "log(Sales)", xlab = "Month")
+lines(liquor$date, reg_liq$fitted.values, col = "tomato")
+```
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+Let's find the average year over year growth of this variable.  Then, let's compare this to the regression coefficient.
+
+. . .
+
+```{r}
+#| code-fold: true
+t <- 2:nrow(liquor)
+pc <- (liquor$sales_adj[t] - liquor$sales_adj[t-1]) / liquor$sales_adj[t-1]
+
+paste0("Regression Coefficient: ", round(reg_liq$coefficients[2], 5), "; Raw average: ", round(mean(pc), 5))
+```
+
+This suggests an average .3% increase per month.
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+Now we need to figure out how to model this process.  We can use the ACF and PACF to guide our thinking.
+
+```{r}
+#| code-fold: true
+par(mfrow = c(1, 2))
+acf(diff(asinh(liquor$sales_adj)), xlim = c(1, 25), main = "log(Adjusted Sales)")
+pacf(diff(asinh(liquor$sales_adj)), xlim = c(1, 25), main = "log(Adjusted Sales)")
+```
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+Estimate an AR(1) and AR(12) model.
+
+```{r}
+#| code-fold: true
+#| output: 'asis'
+r1 <- arima(diff(asinh(liquor$sales_adj)), c(1, 0, 0), include.mean = T)
+r2 <- arima(diff(asinh(liquor$sales_adj)), c(12, 0, 0), include.mean = T)
+
+stargazer(r1, r2, type = "html")
+```
+
+## Example Autoregressive (AR) Model {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+liquor2 <- data.frame(date = max(liquor$date) + months(1:24),
+                      sales = NA, sales_adj = NA,
+                      t = max(liquor$t) + 1:24)
+liquor <- rbind(liquor, liquor2)
+p1 <- predict(r1, n.ahead = 24, interval = "predict")
+p2 <- predict(r2, n.ahead = 24, interval = "predict")
+
+liquor$p1 <- liquor$p2 <- liquor$sales_adj
+liquor$p2_u <- liquor$p2_l <- NA
+w <- which(is.na(liquor$sales_adj))
+for(i in 1:24){
+  
+  liquor$p1[w[i]] <- liquor$p1[w[i] - 1]*(1 + sinh(p1$pred[i]))
+  liquor$p2[w[i]] <- liquor$p2[w[i] - 1]*(1 + sinh(p2$pred[i]))
+  liquor$p2_u[w[i]] <- liquor$p2[w[i] - 1]*(1 + sinh(p2$pred[i]) + 1.645*sinh(p2$se[i]))
+  liquor$p2_l[w[i]] <- liquor$p2[w[i] - 1]*(1 + sinh(p2$pred[i]) - 1.645*sinh(p2$se[i]))
+}
+
+lim <- liquor$date >= ymd("2015-01-01")
+plot(liquor$date[lim], liquor$p1[lim], type = "l", col = scales::alpha("tomato", .6), lwd = 3)
+lines(liquor$date[lim], liquor$p2[lim], col = scales::alpha("dodgerblue", .6), lwd = 3)
+lines(liquor$date[lim], liquor$sales_adj[lim], type = "l", lwd = 3)
+lines(liquor$date[lim], liquor$p2_l[lim], type = "l", col = "dodgerblue")
+lines(liquor$date[lim], liquor$p2_u[lim], type = "l", col = "dodgerblue")
+```
+
+## Example Moving Averge (MA) Model
+
+Suppose you are a car manufacturer.  Each month, you manufacture $m$ vehicles with some error $e_t$.  $e_t$ can be negative some employees are on vacation.  $e_t$ can be positive if an employee brings coffee for everyone one day.
+
+$$\text{V}_t = m + e_t$$
+
+Each time period, some fraction ($1-\theta$) of vehicles are sold, and some are left over ($\theta$).
+
+Therefore, your inventory for every period will look like:
+
+$$\begin{align}
+\text{I}_t = V_t + \theta V_{t-1} &= (m + e_t) + \theta (m + e_{t-1}) \\ &= \mu + e_t + \theta e_{t-1}
+\end{align}$$
+
+## Example Moving Averge (MA) Model {visibility="uncounted"}
+
+Maybe we can model alcohol sales as a moving average process instead of autoregressive.
+
+```{r}
+#| code-fold: true
+#| output: 'asis'
+m1 <- arima(diff(asinh(liquor$sales_adj)), c(0, 0, 1), include.mean = T)
+m2 <- arima(diff(asinh(liquor$sales_adj)), c(0, 0, 12), include.mean = T)
+
+stargazer(m1, m2, type = "html")
+```
+
+## Example Moving Averge (MA) Model {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+pm1 <- predict(m1, n.ahead = 24, interval = "predict")
+pm2 <- predict(m2, n.ahead = 24, interval = "predict")
+
+liquor$pm1 <- liquor$pm2 <- liquor$sales_adj
+w <- which(is.na(liquor$sales_adj))
+for(i in 1:24){
+  
+  liquor$pm1[w[i]] <- liquor$pm1[w[i] - 1]*(1 + sinh(pm1$pred[i]))
+  liquor$pm2[w[i]] <- liquor$pm2[w[i] - 1]*(1 + sinh(pm2$pred[i]))
+  # liquor$pm2_u[w[i]] <- liquor$pm2[w[i] - 1]*(1 + sinh(pm2$pred[i]) + 1.645*sinh(pm2$se[i]))
+  # liquor$pm2_l[w[i]] <- liquor$pm2[w[i] - 1]*(1 + sinh(pm2$pred[i]) - 1.645*sinh(pm2$se[i]))
+}
+
+lim <- liquor$date >= ymd("2015-01-01")
+plot(liquor$date[lim], liquor$pm1[lim], type = "l", col = scales::alpha("tomato", .6), lwd = 3)
+lines(liquor$date[lim], liquor$pm2[lim], col = scales::alpha("dodgerblue", .6), lwd = 3)
+lines(liquor$date[lim], liquor$sales_adj[lim], type = "l", lwd = 3)
+```
+
+## ARMA and ARIMA
+
+ARMA(p,q) - model combining AR(p) and MA(q) models.
+
+ARIMA(p, d, q) - ARMA models that incorporate differencing.
+
+. . .
+
+$$\begin{align}
+Y_{t} = \ &\alpha + \beta_1 Y_{t-1} + \ ...\  + \beta_p Y_{t-p} + e_{t} \\ & + \theta_1 e_{t-1} + \ ... \ \theta_{q}e_{t-q}
+\end{align}$$
+
+## Identifying Lag Structures
+
+<div align="center">
+<iframe width="1120" height="630" src="https://www.youtube.com/embed/ZE_WGBe0_VU?start=183" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen data-external="1"></iframe>
+</div>
+
+## Estimating ARIMA Models
+
+The ```forecast``` package has some nice functions for estimating ARIMA models.
+
+- ```Arima()``` works very similar to ```arima()``` but is slightly more flexible.  We will move towards this function. 
+
+- ```auto.arima``` uses statistical criteria to select the "best" (most likely) model.  Check out this [resource](https://otexts.com/fpp2/arima-r.html) if you are interested.
+
+## Estimating ARIMA Models {visibility="uncounted"}
+
+Let's use ```auto.arima()``` to help us estimate liquor sales.
+
+. . .
+
+```{r}
+#| code-fold: true
+reg <- auto.arima(asinh(liquor$sales_adj[!is.na(liquor$sales_adj)]), seasonal = FALSE)
+reg
+```
+
+## Estimating ARIMA Models {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+f <- forecast(reg, h=24)
+plot(liquor$date, liquor$sales_adj, type = "l", lwd = 2,
+     ylim = range(sinh(f$upper[,2]), sinh(f$lower[,2]), liquor$sales_adj[year(liquor$date) >= 2015], na.rm = TRUE),
+     xlim = ymd(c("2015-01-01", "2022-12-01")))
+lines(liquor$date[is.na(liquor$sales_adj)], sinh(f$mean),
+      col = "tomato", lwd = 2)
+lines(liquor$date[is.na(liquor$sales_adj)], sinh(f$upper[,2]),
+      col = "tomato", lwd = 2, lty = 2)
+lines(liquor$date[is.na(liquor$sales_adj)], sinh(f$lower[,2]),
+      col = "tomato", lwd = 2, lty = 2)
+```
+
+## ARCH, GARCH
+
+(Generalized) Autoregressive Conditional Heteroskedasticity
+
+. . .
+
+Take stocks for example:
+
+- It is extremely difficult to model/forecast returns (EMH vs BF)
+
+- Stock Returns usually follow a random walk with a drift/trend
+
+- Modeling a stocks's *volatility* has some merit.
+
+## ARCH, GARCH {visibility="uncounted"}
+
+Daily Google Stock Returns
+
+```{r}
+#| code-fold: true
+goog <- read.csv("../data/GOOG.csv")
+goog$date <- ymd(goog$Date)
+goog <- goog[order(goog$date),]
+goog$ret <- NA
+goog$ret[2:nrow(goog)] <- diff(goog$Close)
+
+plot(goog$date, goog$ret, type = "l")
+```
+
+## ARCH, GARCH {visibility="uncounted"}
+
+```{r}
+#| code-fold: true
+par(mfrow = c(1, 2))
+lim <- !is.na(goog$ret)
+acf(goog$ret[lim]); pacf(goog$ret[lim])
+```
+
+## ARCH, GARCH
+
+Here are some resources for further reading:
+
+- [```rugarch```](https://cran.r-project.org/web/packages/rugarch/vignettes/Introduction_to_the_rugarch_package.pdf)
+- [ARCH 1](https://rpubs.com/cyobero/arch)
+- [ARCH 2](https://bookdown.org/ccolonescu/RPoE4/time-varying-volatility-and-arch-models.html)
+- [GARCH 1](https://www.r-bloggers.com/2012/07/a-practical-introduction-to-garch-modeling/)
+- [GARCH 2](https://rpubs.com/CongWang141/929782)
+
+
+## Next Class
+
+- Seasonality
+- Standard Errors and Inference
+- Distributed Lags
+- Coefficient Dynamics

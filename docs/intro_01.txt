@@ -1,0 +1,39 @@
+What are "time series" data
+What is forecasting?
+- forecast vs predict?
+	- forecast OOS, predict in-sample
+	- external vs internal validity
+time series models
+- yt = yt-1 + xt + xt-1 + t + c + s
+- your model only considers what's in the model
+	- 2008 crisis? housing was not in the models
+
+
+what r code do we need?
+- duplicated()
+- nrow, length()
+visuals?
+- plot()
+- lines()
+
+
+steps to do time series / forecasting:
+- problem definition?
+- gather data
+- exploratory analysis
+- choose & fit model
+- forecast
+code:
+- figure out problem
+- read data
+	- read
+	- clean
+	- aggregate
+- plot
+- model
+- forecast
+correlation
+
+
+
+
